@@ -2,12 +2,15 @@
 
 import argparse
 import importlib.util
+import logging
 import sys
+from time import perf_counter
 from pathlib import Path
 from typing import Iterable
 
 BASE_DIR = Path(__file__).resolve().parent
 MARKITDOWN_SRC = BASE_DIR / "markitdown" / "packages" / "markitdown" / "src"
+LOGGER = logging.getLogger("markdown_api")
 
 MODULE_TO_PACKAGE = {
     "requests": "requests",
@@ -104,6 +107,14 @@ def build_output_path(source_path: Path) -> Path:
     return source_path.with_name(output_name)
 
 
+def configure_logging() -> None:
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s | %(levelname)s | %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Call MarkItDown directly from the local markitdown source tree."
@@ -117,29 +128,57 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> int:
+    configure_logging()
     args = parse_args()
 
     targets = args.files or ["test.pdf", "test.docx"]
     had_errors = False
+    success_count = 0
+    total_start = perf_counter()
+
+    LOGGER.info("Starting conversion for %d file(s).", len(targets))
+    LOGGER.info("Using local markitdown source: %s", MARKITDOWN_SRC)
+
     for target in targets:
+        file_start = perf_counter()
         abs_path = (
             (BASE_DIR / target).resolve()
             if not Path(target).is_absolute()
             else Path(target)
         )
+        LOGGER.info("Processing file: %s", abs_path)
 
         if not abs_path.exists():
             had_errors = True
+            LOGGER.error("File not found: %s", abs_path)
             continue
 
         try:
             result = convert_file(abs_path)
         except Exception:
             had_errors = True
+            LOGGER.exception(
+                "Failed to convert %s after %.2f seconds.",
+                abs_path.name,
+                perf_counter() - file_start,
+            )
             continue
 
         output_path = build_output_path(abs_path)
         output_path.write_text(result.markdown, encoding="utf-8")
+        success_count += 1
+        LOGGER.info(
+            "Saved Markdown to %s in %.2f seconds.",
+            output_path,
+            perf_counter() - file_start,
+        )
+
+    LOGGER.info(
+        "Finished conversion. Success: %d, Failed: %d, Total time: %.2f seconds.",
+        success_count,
+        len(targets) - success_count,
+        perf_counter() - total_start,
+    )
 
     return 1 if had_errors else 0
 
