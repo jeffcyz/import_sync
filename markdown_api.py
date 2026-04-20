@@ -98,6 +98,12 @@ def convert_file(file_path: str | Path, **kwargs):
     return converter.convert(str(resolved_path), **kwargs)
 
 
+def build_output_path(source_path: Path) -> Path:
+    source_format = source_path.suffix.lower().lstrip(".") or "unknown"
+    output_name = f"{source_path.stem}_from_{source_format}.md"
+    return source_path.with_name(output_name)
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Call MarkItDown directly from the local markitdown source tree."
@@ -114,23 +120,28 @@ def main() -> int:
     args = parse_args()
 
     targets = args.files or ["test.pdf", "test.docx"]
+    had_errors = False
     for target in targets:
-        abs_path = (BASE_DIR / target).resolve() if not Path(target).is_absolute() else Path(target)
-        print(f"=== markitdown {abs_path.name} ===")
+        abs_path = (
+            (BASE_DIR / target).resolve()
+            if not Path(target).is_absolute()
+            else Path(target)
+        )
 
         if not abs_path.exists():
-            print(f"[error] File not found: {abs_path}")
+            had_errors = True
             continue
 
         try:
             result = convert_file(abs_path)
-        except Exception as exc:
-            print(f"[error] {exc}")
+        except Exception:
+            had_errors = True
             continue
 
-        print(result.markdown)
+        output_path = build_output_path(abs_path)
+        output_path.write_text(result.markdown, encoding="utf-8")
 
-    return 0
+    return 1 if had_errors else 0
 
 
 if __name__ == "__main__":
