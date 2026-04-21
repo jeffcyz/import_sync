@@ -33,26 +33,38 @@ INVALID_STATE_EXPECTED = "Valid US State Code (e.g., CA, NY, TX)"
 INVALID_STATE_MESSAGE = "State Code is not valid"
 
 
-def SetUpValidationStateCode(assets):
+def SetUpValidationStateCode(
+    assets,
+    return_results=False,
+    interrupt_after_scan=False,
+):
     """
     Validates that all assets in assetsetup have valid state codes and do not have blanks or nulls.
     If a validation fails, this function leverages the host system's existing asset.raise_error()
     behavior through ValidationHelperApi so we keep the native ASAP2 error experience.
-    """
-    for index, asset in enumerate(assets):
-        state_code = asset.setup.State
-        invalid_state_details = _get_invalid_state_details(state_code)
-        if invalid_state_details:
-            expected, actual = invalid_state_details
-            _emit_invalid_state_code(
-                asset=asset,
-                asset_index=index,
-                expected=expected,
-                actual=actual,
-            )
-            return
 
-    return
+    Returns:
+    ----
+        bool or list:
+            Returns True if all validation checks pass.
+            Returns False if any validation check fails.
+            Returns structured validation results when return_results=True.
+
+    Raises:
+    ----
+        ValueError: If return_results=True and interrupt_after_scan=True.
+        ValueError: If interrupt_after_scan=True and any validation check fails.
+    """
+    results = scan_state_code(assets)
+    return ValidationHelperApi(
+        operation="finalize_scan",
+        results=results,
+        return_results=return_results,
+        interrupt_after_scan=interrupt_after_scan,
+        error_prefix="SetUpValidationStateCode failed after scan",
+        identifier_key="asset_index",
+        identifier_label="asset_indexes",
+    )
 
 
 def _get_invalid_state_details(state_code):
@@ -92,6 +104,30 @@ def _emit_invalid_state_code(asset, asset_index, expected, actual):
         expected_value=expected,
         actual_value=actual,
     )
+
+
+def scan_state_code(assets):
+    """
+    Scans assets and returns structured validation results for invalid state codes.
+    """
+    results = []
+
+    for index, asset in enumerate(assets):
+        state_code = asset.setup.State
+        invalid_state_details = _get_invalid_state_details(state_code)
+        if not invalid_state_details:
+            continue
+
+        expected, actual = invalid_state_details
+        result = _emit_invalid_state_code(
+            asset=asset,
+            asset_index=index,
+            expected=expected,
+            actual=actual,
+        )
+        results.append(result)
+
+    return results
 
 
 SetUpValidationStateCode(assets)

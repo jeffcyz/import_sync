@@ -52,6 +52,16 @@ def ValidationHelperApi(
             include_results=kwargs.get("include_results", False),
         )
 
+    if operation == "finalize_scan":
+        return finalize_scan(
+            results=kwargs.get("results", []),
+            return_results=kwargs.get("return_results", False),
+            interrupt_after_scan=kwargs.get("interrupt_after_scan", False),
+            error_prefix=kwargs.get("error_prefix", "Validation failed after scan"),
+            identifier_key=kwargs.get("identifier_key"),
+            identifier_label=kwargs.get("identifier_label"),
+        )
+
     if operation in ("build_log_entry", "format_log_entry"):
         return build_log_entry(kwargs.get("result"))
 
@@ -680,3 +690,41 @@ def summarize_results(results, minimum_severity=None, include_results=False):
             "results": normalized_results,
         }
     return summary
+
+
+def finalize_scan(
+    results,
+    return_results=False,
+    interrupt_after_scan=False,
+    error_prefix="Validation failed after scan",
+    identifier_key=None,
+    identifier_label=None,
+):
+    if return_results and interrupt_after_scan:
+        raise ValueError("return_results and interrupt_after_scan cannot both be True.")
+
+    normalized_results = [coerce_result_item(item) for item in (results or [])]
+    summary = summarize_results(normalized_results)
+
+    if interrupt_after_scan and summary.get("fail", 0) > 0:
+        message = "%s: %s finding(s), highest severity=%s" % (
+            error_prefix,
+            summary.get("fail", 0),
+            summary.get("highest_severity"),
+        )
+        if identifier_key:
+            failed_identifiers = [
+                result.get("context", {}).get(identifier_key)
+                for result in normalized_results
+                if not result.get("passed")
+            ]
+            message = "%s, %s=%s" % (
+                message,
+                identifier_label or identifier_key,
+                failed_identifiers,
+            )
+        raise ValueError(message)
+
+    if return_results:
+        return results
+    return summary.get("fail", 0) == 0

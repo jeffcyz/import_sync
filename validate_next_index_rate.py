@@ -41,33 +41,16 @@ def validate_next_index_rate(
         ValueError: If return_results=True and interrupt_after_scan=True.
         ValueError: If interrupt_after_scan=True and any validation check fails.
     """
-    if return_results and interrupt_after_scan:
-        raise ValueError("return_results and interrupt_after_scan cannot both be True.")
-
     results = scan_next_index_rate(bds, p=p)
-    summary = ValidationHelperApi(
-        operation="summarize_results",
+    return ValidationHelperApi(
+        operation="finalize_scan",
         results=results,
+        return_results=return_results,
+        interrupt_after_scan=interrupt_after_scan,
+        error_prefix="ValidateNextIndexRate failed after scan",
+        identifier_key="bond_name",
+        identifier_label="bonds",
     )
-
-    if interrupt_after_scan and summary.get("fail", 0) > 0:
-        failed_bonds = [
-            result.get("context", {}).get("bond_name")
-            for result in results
-            if not result.get("passed")
-        ]
-        raise ValueError(
-            "ValidateNextIndexRate failed after scan: %s finding(s), highest severity=%s, bonds=%s"
-            % (
-                summary.get("fail", 0),
-                summary.get("highest_severity"),
-                failed_bonds,
-            )
-        )
-
-    if return_results:
-        return results
-    return summary.get("fail", 0) == 0
 
 
 def _resolve_host_target(bond_object, bond_periodic):
