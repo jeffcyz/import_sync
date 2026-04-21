@@ -83,10 +83,11 @@ def _is_missing_next_index_rate(value):
         return True
     if isinstance(value, str):
         normalized = value.strip()
-        if normalized in ("", "0", "0.0"):
-            return True
+        return normalized in ("", "0", "0.0")
+    if isinstance(value, bool):
         return False
     return value == 0
+
 
 def scan_next_index_rate(bds, p: int = None):
     """

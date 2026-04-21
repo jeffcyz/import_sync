@@ -188,6 +188,45 @@ def coerce_bool(value):
     return bool(value)
 
 
+def is_missing_value(
+    value,
+    strip_strings=False,
+    missing_strings=None,
+    missing_values=None,
+    treat_zero_as_missing=False,
+):
+    if missing_values is None:
+        missing_values = (None, "")
+
+    if value in missing_values:
+        return True
+
+    if isinstance(value, str):
+        normalized = value.strip() if strip_strings else value
+        if normalized == "":
+            return True
+        if missing_strings and normalized in missing_strings:
+            return True
+        return False
+
+    if isinstance(value, bool):
+        return False
+
+    if treat_zero_as_missing and value == 0:
+        return True
+
+    return False
+
+
+def is_blank_or_zero(value):
+    return is_missing_value(
+        value,
+        strip_strings=True,
+        missing_strings=("0", "0.0"),
+        treat_zero_as_missing=True,
+    )
+
+
 def threshold_to_severity(threshold, default="WARNING"):
     threshold = coerce_int(threshold)
     if threshold is None:
@@ -300,7 +339,7 @@ def check_required(
     expected_value=None,
     actual_value=None,
 ):
-    passed = value not in (None, "", [])
+    passed = not is_missing_value(value, missing_values=(None, "", []))
     merged_context = dict(context or {})
     merged_context.setdefault("field_name", field_name)
     if not passed:
