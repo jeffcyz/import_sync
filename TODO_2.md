@@ -280,3 +280,36 @@ if interrupt_after_scan and fail:
 return True / False
 
 这比把所有中断逻辑都塞进 validation_api.py 更灵活，尤其适合 ASAP2 这种每个 validation script 都可能需要不同 interrupt message 的场景。
+
+def _extract_result_items(value):
+    if value is None:
+        return []
+
+    # payload dict: {"summary": ..., "results": [...]}
+    if isinstance(value, dict):
+        return value.get("results", [])
+
+    # normal list of result dicts
+    if isinstance(value, list):
+        return value
+
+    return []
+
+
+def _build_validation_error_message(result_payload, summary):
+    result_items = _extract_result_items(result_payload)
+
+    failed_bonds = [
+        item.get("context", {}).get("bond_name")
+        for item in result_items
+        if isinstance(item, dict) and not item.get("passed")
+    ]
+
+    return (
+        "ValidateNextIndexRate failed after scan: %s finding(s), highest severity=%s, bonds=%s"
+        % (
+            summary.get("fail", 0),
+            summary.get("highest_severity"),
+            failed_bonds,
+        )
+    )
