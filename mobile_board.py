@@ -1,1 +1,1 @@
-print('Mobile content')
+print('Mobile content v2')
