@@ -1,242 +1,170 @@
-你这个 DOM 是 AG Grid 的一行：
+你不能在 selector 里硬编码 05/26/2026，那就应该先定位这个 Processing Date 组件本身，再从它内部读取当前选中的文本。
 
-<div role="row" row-index="2">
-  <div role="gridcell" col-id="Name">legal_exp</div>
-  <div role="gridcell" col-id="Type">Number</div>
-  <div role="gridcell" col-id="Required">...</div>
-  <div role="gridcell" col-id="Value">
-    <span class="number-cell">0.0000000000</span>
-  </div>
+从截图看结构大概是：
+
+<span class="payment-date">Processing Date</span>
+<div class="ant-select ... payment-date ...">
+  ...
+  <span class="ant-select-selection-item" title="05/26/2026">
+    05/26/2026
+  </span>
 </div>
 
-你的目标是：
+所以正确思路是：
 
-找到 Name == legal_exp 的那一行，然后编辑同一行 Value 列里的 0.00000
-
-核心逻辑不是直接按 0.00000 找，而是：
-
-row[Name == "legal_exp"] -> same row -> Value cell -> edit
+找到 label = Processing Date
+→ 找到它后面的 ant-select
+→ 读取 ant-select-selection-item 的 text 或 title
 
 ⸻
 
-方案 1：用 XPath 精准定位同一行的 Value cell
+推荐写法 1：通过 Processing Date label 定位
 
 from selenium.webdriver.common.by import By
-from selenium.webdriver.common.keys import Keys
-from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 wait = WebDriverWait(driver, 20)
-name = "legal_exp"
-new_value = "50"
-# 找到 Name 列文本为 legal_exp 的那一整行
-row = wait.until(EC.presence_of_element_located((
+processing_date_el = wait.until(EC.presence_of_element_located((
     By.XPATH,
-    f"//div[@role='row'][.//div[@col-id='Name' and normalize-space()='{name}']]"
+    "//span[contains(@class,'payment-date') and normalize-space()='Processing Date']"
+    "/following-sibling::div[contains(@class,'ant-select')][1]"
+    "//span[contains(@class,'ant-select-selection-item')]"
 )))
-# 在同一行里找到 Value 列
-value_cell = row.find_element(By.XPATH, ".//div[@col-id='Value']")
-# 双击进入编辑
-ActionChains(driver).double_click(value_cell).perform()
-# 当前 active element 通常就是 AG Grid 创建出来的 input
-editor = driver.switch_to.active_element
-# 全选并输入新值
-editor.send_keys(Keys.CONTROL, "a")
-editor.send_keys(new_value)
-editor.send_keys(Keys.ENTER)
+processing_date_text = processing_date_el.text.strip()
+print(processing_date_text)
 
-这是最推荐的第一版。
+输出：
+
+05/26/2026
 
 ⸻
 
-方案 2：如果双击后没有进入编辑，用 click + Enter
+推荐写法 2：读取 title 属性，更稳定
 
-有些 AG Grid 配置是单击选中，按 Enter 才进入编辑。
+Ant Design 的 Select 当前值经常同时存在于：
 
-value_cell.click()
-ActionChains(driver)\
-    .send_keys(Keys.ENTER)\
-    .send_keys(Keys.CONTROL, "a")\
-    .send_keys("50")\
-    .send_keys(Keys.ENTER)\
-    .perform()
+<span class="ant-select-selection-item" title="05/26/2026">
+    05/26/2026
+</span>
 
-完整写法：
+所以你也可以直接读 title：
 
-row = wait.until(EC.presence_of_element_located((
+processing_date_el = wait.until(EC.presence_of_element_located((
     By.XPATH,
-    "//div[@role='row'][.//div[@col-id='Name' and normalize-space()='legal_exp']]"
+    "//span[contains(@class,'payment-date') and normalize-space()='Processing Date']"
+    "/following-sibling::div[contains(@class,'ant-select')][1]"
+    "//span[contains(@class,'ant-select-selection-item')]"
 )))
-value_cell = row.find_element(By.XPATH, ".//div[@col-id='Value']")
-value_cell.click()
-actions = ActionChains(driver)
-actions.send_keys(Keys.ENTER)
-actions.send_keys(Keys.CONTROL, "a")
-actions.send_keys("50")
-actions.send_keys(Keys.ENTER)
-actions.perform()
+processing_date = processing_date_el.get_attribute("title") or processing_date_el.text
+processing_date = processing_date.strip()
+print(processing_date)
+
+这个比只读 .text 更稳。
 
 ⸻
 
-方案 3：更稳的函数封装
-
-你可以写成一个通用函数：
+推荐写法 3：封装成函数
 
 from selenium.webdriver.common.by import By
-from selenium.webdriver.common.keys import Keys
-from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-def edit_ag_grid_value_by_name(driver, name: str, new_value: str, timeout: int = 20):
+def get_processing_date(driver, timeout=20):
     wait = WebDriverWait(driver, timeout)
-    row_xpath = (
-        f"//div[@role='row']"
-        f"[.//div[@role='gridcell' and @col-id='Name' and normalize-space()='{name}']]"
-    )
-    row = wait.until(EC.presence_of_element_located((By.XPATH, row_xpath)))
-    value_cell = row.find_element(
+    item = wait.until(lambda d: d.find_element(
         By.XPATH,
-        ".//div[@role='gridcell' and @col-id='Value']"
-    )
-    driver.execute_script(
-        "arguments[0].scrollIntoView({block: 'center', inline: 'center'});",
-        value_cell
-    )
-    wait.until(EC.element_to_be_clickable(value_cell))
-    # 先尝试双击编辑
-    ActionChains(driver).double_click(value_cell).perform()
-    editor = driver.switch_to.active_element
-    editor.send_keys(Keys.CONTROL, "a")
-    editor.send_keys(str(new_value))
-    editor.send_keys(Keys.ENTER)
-    return True
-
-调用：
-
-edit_ag_grid_value_by_name(driver, "legal_exp", "50")
-
-⸻
-
-方案 4：如果 AG Grid 行很多，需要先滚动到 legal_exp
-
-AG Grid 是虚拟滚动表格，DOM 里只存在当前可见的行。
-也就是说，如果 legal_exp 不在当前 viewport 里，XPath 会找不到。
-
-这种情况下需要滚动 grid body，直到该行出现。
-
-示例：
-
-from selenium.common.exceptions import TimeoutException, NoSuchElementException
-from selenium.webdriver.common.by import By
-import time
-def find_ag_grid_row_by_name_with_scroll(driver, name: str, max_scrolls: int = 80):
-    row_xpath = (
-        f"//div[@role='row']"
-        f"[.//div[@role='gridcell' and @col-id='Name' and normalize-space()='{name}']]"
-    )
-    viewport = driver.find_element(By.CSS_SELECTOR, ".ag-body-viewport")
-    for _ in range(max_scrolls):
-        rows = driver.find_elements(By.XPATH, row_xpath)
-        if rows:
-            return rows[0]
-        driver.execute_script("arguments[0].scrollTop += 300;", viewport)
-        time.sleep(0.1)
-    raise NoSuchElementException(f"Cannot find AG Grid row with Name = {name}")
-
-然后结合编辑：
-
-def edit_ag_grid_value_by_name_scroll(driver, name: str, new_value: str):
-    row = find_ag_grid_row_by_name_with_scroll(driver, name)
-    value_cell = row.find_element(By.XPATH, ".//div[@col-id='Value']")
-    driver.execute_script(
-        "arguments[0].scrollIntoView({block: 'center', inline: 'center'});",
-        value_cell
-    )
-    ActionChains(driver).double_click(value_cell).perform()
-    editor = driver.switch_to.active_element
-    editor.send_keys(Keys.CONTROL, "a")
-    editor.send_keys(str(new_value))
-    editor.send_keys(Keys.ENTER)
-
-调用：
-
-edit_ag_grid_value_by_name_scroll(driver, "legal_exp", "50")
-
-⸻
-
-关键点解释
-
-你截图里的这一行：
-
-<div role="gridcell" col-id="Name">legal_exp</div>
-
-和这个：
-
-<div role="gridcell" col-id="Value">
-    <span class="number-cell">0.0000000000</span>
-</div>
-
-是同一个父级 row 下面的兄弟 cell。
-
-所以 XPath 应该从 row 级别定位：
-
-//div[@role='row'][.//div[@col-id='Name' and normalize-space()='legal_exp']]
-
-然后在这个 row 内找：
-
-.//div[@col-id='Value']
-
-不要直接用：
-
-//span[text()='0.0000000000']
-
-因为页面里可能有很多个 0.0000000000，容易改错。
-
-⸻
-
-如果是 Mac，CTRL + A 可能不生效
-
-如果你在 Mac 上跑 Selenium，浏览器里全选有时需要 COMMAND + A：
-
-from selenium.webdriver.common.keys import Keys
-import platform
-select_key = Keys.COMMAND if platform.system() == "Darwin" else Keys.CONTROL
-editor.send_keys(select_key, "a")
-editor.send_keys("50")
-editor.send_keys(Keys.ENTER)
-
-⸻
-
-最终推荐版本
-
-from selenium.webdriver.common.by import By
-from selenium.webdriver.common.keys import Keys
-from selenium.webdriver.common.action_chains import ActionChains
-from selenium.webdriver.support.ui import WebDriverWait
-import platform
-def edit_legal_exp(driver, new_value):
-    wait = WebDriverWait(driver, 20)
-    row = wait.until(lambda d: d.find_element(
-        By.XPATH,
-        "//div[@role='row'][.//div[@role='gridcell' and @col-id='Name' and normalize-space()='legal_exp']]"
+        "//span[contains(@class,'payment-date') and normalize-space()='Processing Date']"
+        "/following-sibling::div[contains(@class,'ant-select')][1]"
+        "//span[contains(@class,'ant-select-selection-item')]"
     ))
-    value_cell = row.find_element(
-        By.XPATH,
-        ".//div[@role='gridcell' and @col-id='Value']"
-    )
-    driver.execute_script(
-        "arguments[0].scrollIntoView({block: 'center', inline: 'center'});",
-        value_cell
-    )
-    ActionChains(driver).double_click(value_cell).perform()
-    editor = driver.switch_to.active_element
-    select_key = Keys.COMMAND if platform.system() == "Darwin" else Keys.CONTROL
-    editor.send_keys(select_key, "a")
-    editor.send_keys(str(new_value))
-    editor.send_keys(Keys.ENTER)
+    value = item.get_attribute("title") or item.text
+    return value.strip()
 
 调用：
 
-edit_legal_exp(driver, 50)
+processing_date = get_processing_date(driver)
+print(processing_date)
 
-如果你是在 ASAP2 / AG Grid 这种页面里操作，这个思路基本就是正确方向：先锁定 Name，再编辑同 row 的 Value。
+⸻
+
+如果页面里有多个 modal，建议限制在当前打开的 modal 内
+
+因为 Ant Design modal 可能会保留旧 DOM。更稳的是先锁定当前可见的 dialog：
+
+modal = wait.until(EC.presence_of_element_located((
+    By.XPATH,
+    "//div[@role='dialog' and @aria-modal='true']"
+)))
+processing_date_el = modal.find_element(
+    By.XPATH,
+    ".//span[contains(@class,'payment-date') and normalize-space()='Processing Date']"
+    "/following-sibling::div[contains(@class,'ant-select')][1]"
+    "//span[contains(@class,'ant-select-selection-item')]"
+)
+processing_date = (
+    processing_date_el.get_attribute("title")
+    or processing_date_el.text
+).strip()
+print(processing_date)
+
+⸻
+
+如果 .text 为空，用 JavaScript 读取
+
+有些 Ant Design 元素会因为 overlay、opacity、readonly 等原因导致 .text 读不到。可以用 JS：
+
+processing_date = driver.execute_script(
+    "return arguments[0].textContent;",
+    processing_date_el
+).strip()
+print(processing_date)
+
+或者优先读 title：
+
+processing_date = driver.execute_script(
+    "return arguments[0].getAttribute('title') || arguments[0].textContent;",
+    processing_date_el
+).strip()
+
+⸻
+
+最稳版本
+
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+def get_processing_date_from_modal(driver, timeout=20):
+    wait = WebDriverWait(driver, timeout)
+    modal = wait.until(lambda d: d.find_element(
+        By.XPATH,
+        "//div[@role='dialog' and @aria-modal='true']"
+    ))
+    date_item = modal.find_element(
+        By.XPATH,
+        ".//span[contains(@class,'payment-date') and normalize-space()='Processing Date']"
+        "/following-sibling::div[contains(@class,'ant-select')][1]"
+        "//span[contains(@class,'ant-select-selection-item')]"
+    )
+    value = driver.execute_script(
+        "return arguments[0].getAttribute('title') || arguments[0].textContent;",
+        date_item
+    )
+    return value.strip()
+
+调用：
+
+processing_date = get_processing_date_from_modal(driver)
+print(processing_date)
+
+⸻
+
+关键是不要这样写：
+
+driver.find_element(By.XPATH, "//*[text()='05/26/2026']")
+
+因为你现在就是不知道日期是什么。
+
+应该用稳定的上下文：
+
+//span[normalize-space()='Processing Date']
+
+然后找它旁边的当前选中值：
+
+/following-sibling::div[contains(@class,'ant-select')][1]//span[contains(@class,'ant-select-selection-item')]
