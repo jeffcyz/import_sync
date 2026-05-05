@@ -1,233 +1,219 @@
-这是 Ant Design Select dropdown，不是普通 <select>，所以不能用 Selenium 的 Select()。要用 点击 selector → 输入/搜索 → 点击下拉 option 的方式。
+你准备 parental leave 时，coverage plan 的核心目标是：让老板和团队清楚知道 你离开期间哪些工作需要继续、谁负责、怎么处理异常、你回来后如何交接回来。
 
-你的目标应该是：
-
-定位 Processing Date 这个 ant-select
-→ click 打开 dropdown
-→ 输入目标日期，比如 05/26/2026
-→ 点击下拉项
-
-推荐函数：按 label 设置 Processing Date
-
-from selenium.webdriver.common.by import By
-from selenium.webdriver.common.keys import Keys
-from selenium.webdriver.common.action_chains import ActionChains
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-def set_processing_date(driver, target_date: str, timeout: int = 20):
-    wait = WebDriverWait(driver, timeout)
-    # 1. 锁定当前打开的 modal
-    modal = wait.until(EC.presence_of_element_located((
-        By.XPATH,
-        "//div[@role='dialog' and @aria-modal='true']"
-    )))
-    # 2. 找到 Processing Date 后面的 ant-select
-    select_box = modal.find_element(
-        By.XPATH,
-        ".//span[contains(@class,'payment-date') and normalize-space()='Processing Date']"
-        "/following-sibling::div[contains(@class,'ant-select')][1]"
-    )
-    # 3. 点击打开 dropdown
-    driver.execute_script(
-        "arguments[0].scrollIntoView({block: 'center', inline: 'center'});",
-        select_box
-    )
-    select_box.click()
-    # 4. 找到 ant-select 内部的 search input
-    input_el = wait.until(EC.presence_of_element_located((
-        By.XPATH,
-        "//input[contains(@class,'ant-select-selection-search-input') "
-        "and @role='combobox']"
-    )))
-    # 5. 输入目标日期
-    input_el.send_keys(Keys.CONTROL, "a")
-    input_el.send_keys(target_date)
-    # 6. 点击 dropdown 里匹配的 option
-    option = wait.until(EC.element_to_be_clickable((
-        By.XPATH,
-        "//div[contains(@class,'ant-select-dropdown') and not(contains(@style,'display: none'))]"
-        f"//div[contains(@class,'ant-select-item-option') "
-        f"and .//div[normalize-space()='{target_date}' or normalize-space()='{target_date}']]"
-    )))
-    option.click()
-    # 7. 可选：确认值已经被设置
-    selected_item = select_box.find_element(
-        By.XPATH,
-        ".//span[contains(@class,'ant-select-selection-item')]"
-    )
-    selected_value = (
-        selected_item.get_attribute("title")
-        or selected_item.text
-    ).strip()
-    if selected_value != target_date:
-        raise RuntimeError(
-            f"Processing Date was not set correctly. "
-            f"Expected {target_date}, got {selected_value}"
-        )
-    return selected_value
-
-调用：
-
-set_processing_date(driver, "05/26/2026")
+可以按下面这个结构来做。
 
 ⸻
 
-如果输入后 dropdown 不过滤，直接点击 option
+1. 先列出你目前负责的所有工作
 
-有些 Ant Design dropdown 是只读输入框，input 虽然存在，但 readonly。这种情况下先打开 dropdown，然后直接找 option：
+建议分成几类：
 
-def set_processing_date_no_typing(driver, target_date: str, timeout: int = 20):
-    wait = WebDriverWait(driver, timeout)
-    modal = wait.until(EC.presence_of_element_located((
-        By.XPATH,
-        "//div[@role='dialog' and @aria-modal='true']"
-    )))
-    select_box = modal.find_element(
-        By.XPATH,
-        ".//span[contains(@class,'payment-date') and normalize-space()='Processing Date']"
-        "/following-sibling::div[contains(@class,'ant-select')][1]"
-    )
-    select_box.click()
-    option = wait.until(EC.element_to_be_clickable((
-        By.XPATH,
-        "//div[contains(@class,'ant-select-dropdown') and not(contains(@style,'display: none'))]"
-        f"//div[contains(@class,'ant-select-item-option') and normalize-space()='{target_date}']"
-    )))
-    option.click()
+A. 日常运营 / BAU tasks
 
-⸻
+英文可以写：
 
-如果 option 不在当前可见列表里，需要键盘选择
+Daily BAU responsibilities
 
-如果 dropdown 打开后，你能输入日期，但 Selenium 找不到 option，可以用 Enter 提交当前高亮项：
+例如：
 
-def set_processing_date_by_keyboard(driver, target_date: str, timeout: int = 20):
-    wait = WebDriverWait(driver, timeout)
-    modal = wait.until(EC.presence_of_element_located((
-        By.XPATH,
-        "//div[@role='dialog' and @aria-modal='true']"
-    )))
-    select_box = modal.find_element(
-        By.XPATH,
-        ".//span[contains(@class,'payment-date') and normalize-space()='Processing Date']"
-        "/following-sibling::div[contains(@class,'ant-select')][1]"
-    )
-    select_box.click()
-    input_el = wait.until(EC.presence_of_element_located((
-        By.XPATH,
-        "//input[contains(@class,'ant-select-selection-search-input') and @role='combobox']"
-    )))
-    input_el.send_keys(Keys.CONTROL, "a")
-    input_el.send_keys(target_date)
-    input_el.send_keys(Keys.ENTER)
+* Daily deal monitoring
+* Payment / distribution support
+* Client inquiries
+* Internal team requests
+* Reporting / tracking
+* Production issue follow-up
 
-⸻
+B. 周期性工作 / Recurring tasks
 
-更适合你当前截图的简化版
+Recurring deliverables
 
-你的这个 input 是：
+例如：
 
-<input
-  type="search"
-  role="combobox"
-  readonly
-  unselectable="on"
-  class="ant-select-selection-search-input"
->
+* Monthly distribution cycle
+* Quarterly reports
+* Month-end / quarter-end activities
+* Weekly status updates
+* Regular client deliverables
 
-这里有一个重要信息：
+C. 项目类工作 / Project work
 
-readonly
+Ongoing projects
 
-所以它大概率不能直接 send_keys 输入。你需要：
+例如：
 
-select_box.click()
-option.click()
+* ASAP2 migration
+* Global function testing
+* Automation tools
+* Reporting enhancement
+* Workflow improvement projects
 
-也就是用 dropdown 选，而不是往 input 里打字。
+D. 风险较高或需要特别关注的事项
 
-推荐你先用这个：
+High-priority / time-sensitive items
 
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-def choose_processing_date(driver, target_date: str, timeout: int = 20):
-    wait = WebDriverWait(driver, timeout)
-    modal = wait.until(EC.presence_of_element_located((
-        By.XPATH,
-        "//div[@role='dialog' and @aria-modal='true']"
-    )))
-    select_box = modal.find_element(
-        By.XPATH,
-        ".//span[contains(@class,'payment-date') and normalize-space()='Processing Date']"
-        "/following-sibling::div[contains(@class,'ant-select')][1]"
-    )
-    driver.execute_script(
-        "arguments[0].scrollIntoView({block: 'center'});",
-        select_box
-    )
-    select_box.click()
-    option = wait.until(EC.element_to_be_clickable((
-        By.XPATH,
-        "//div[contains(@class,'ant-select-dropdown') and not(contains(@class,'ant-select-dropdown-hidden'))]"
-        f"//div[contains(@class,'ant-select-item-option') and normalize-space()='{target_date}']"
-    )))
-    option.click()
-    return target_date
+例如：
 
-调用：
-
-choose_processing_date(driver, "05/26/2026")
+* Upcoming launch
+* Client-sensitive deliverables
+* Regulatory or compliance-sensitive items
+* Items with hard deadlines
+* Known issues or dependencies
 
 ⸻
 
-如果点击 option 失败，用 JavaScript click
+2. 给每项工作指定 backup owner
 
-Ant Design dropdown 经常有遮挡或动画，普通 .click() 有时会失败：
+你可以做一个表格，最实用：
 
-driver.execute_script("arguments[0].click();", option)
-
-替换这里：
-
-option.click()
-
-为：
-
-driver.execute_script("arguments[0].click();", option)
+Workstream	Description	Frequency	Primary Backup	Secondary Backup	Key Dates	Notes
+Monthly distributions	Support monthly payment/distribution process	Monthly	Name A	Name B	5th BD monthly	Follow standard checklist
+Client inquiries	Respond to client questions	As needed	Name A	Manager	N/A	Escalate urgent items
+ASAP2 testing	Continue testing and issue tracking	Weekly	Name B	Name C	Every Friday	Update tracker
+Reports	Prepare/send recurring reports	Monthly	Name C	Name A	Month-end	Template saved in folder
 
 ⸻
 
-如果日期不是固定输入，而是想选择下一个 Processing Date
+3. 把每项工作写清楚“怎么做”
 
-你可以先打开 dropdown，然后读取所有 option：
+不要只写“XX will cover this”。最好写到可以执行的程度：
 
-select_box.click()
-options = wait.until(EC.presence_of_all_elements_located((
-    By.XPATH,
-    "//div[contains(@class,'ant-select-dropdown') and not(contains(@class,'ant-select-dropdown-hidden'))]"
-    "//div[contains(@class,'ant-select-item-option')]"
-)))
-dates = [o.text.strip() for o in options if o.text.strip()]
-print(dates)
+每项工作建议包含：
 
-然后选择第一个：
+* What needs to be done
+* Where files/tools are located
+* Key contacts
+* Deadline/frequency
+* Step-by-step process or checklist
+* Escalation path
+* Known risks/issues
 
-options[0].click()
+英文模板：
 
-或者选择最后一个：
-
-options[-1].click()
+For each workstream, I will document the process, key contacts, file locations, recurring deadlines, and escalation points to ensure a smooth transition during my parental leave.
 
 ⸻
 
-你这个元素最关键的判断是：
+4. 明确哪些事情可以等你回来
 
-readonly
+这点很重要，不然 backup 会被所有事情压垮。
 
-所以这类 Ant Design dropdown 通常不是“输入框赋值”，而是：
+你可以分成三档：
 
-click select → click option
+Must continue during leave
 
-而不是：
+必须继续做。
 
-send_keys 到 input
+Can be handled only if urgent
+
+只有紧急时处理。
+
+Can wait until return
+
+可以等你回来。
+
+英文可以写：
+
+I will categorize my responsibilities into items that must continue during my leave, items that should only be handled if urgent, and items that can wait until my return.
+
+⸻
+
+5. 安排 leave 前的 handover meeting
+
+建议至少安排：
+
+1. Manager review meeting
+    先和老板确认 coverage strategy。
+2. Backup owner handover meeting
+    给每个 backup 单独讲他们负责的部分。
+3. Team walkthrough meeting
+    整体过一遍 coverage plan、deadlines、escalation path。
+
+英文：
+
+I will schedule handover sessions with my backup owners and manager to walk through open items, key deadlines, process documentation, and escalation procedures before my leave begins.
+
+⸻
+
+6. 准备一个 central tracker / handover document
+
+建议用 Excel、SharePoint、OneNote、Confluence、Teams folder 都可以。
+
+文件名可以叫：
+
+Parental Leave Coverage Plan
+Parental Leave Handover Tracker
+Leave Coverage and Transition Plan
+
+里面至少包括：
+
+1. Overview
+2. Leave dates
+3. Coverage contacts
+4. Workstream tracker
+5. Open items
+6. Key deadlines
+7. Escalation path
+8. File/tool locations
+9. Return transition plan
+
+⸻
+
+7. 给老板发的英文说明可以这样写
+
+Hi [Manager Name],
+
+As I prepare for my upcoming parental leave, I am putting together a coverage plan to ensure a smooth transition and continuity of key responsibilities while I am out.
+
+My plan is to document my current workstreams, recurring deliverables, open items, key deadlines, process steps, file locations, and escalation contacts. I will also identify primary and secondary backup owners for each area and schedule handover sessions before my leave begins.
+
+I will categorize the work into the following groups:
+
+1. Items that must continue during my leave
+2. Items that should be handled only if urgent
+3. Items that can wait until my return
+
+I will share a draft coverage tracker with you for review and would appreciate your feedback on backup ownership, prioritization, and any additional areas you would like me to include.
+
+Thanks,
+[Your Name]
+
+⸻
+
+8. 你可以用的英文表达
+
+中文“我准备 parental leave，我要做交接计划”可以说：
+
+I am preparing for my parental leave and would like to create a coverage plan to ensure business continuity during my absence.
+
+或者更自然一点：
+
+As I prepare for parental leave, I want to make sure there is a clear coverage plan in place for my responsibilities, open items, recurring deliverables, and escalation points.
+
+“谁来接手我的工作”：
+
+identify backup owners for my key responsibilities
+
+“确保工作不断档”：
+
+ensure continuity of key deliverables
+
+“交接会议”：
+
+handover sessions
+transition meetings
+knowledge transfer sessions
+
+“我回来后重新接回来”：
+
+return transition plan
+transition-back plan
+
+⸻
+
+9. 最推荐你的 coverage plan 标题
+
+我建议用：
+
+Parental Leave Coverage and Transition Plan
+
+这个比单纯 “handover plan” 更专业，因为它包含了 leave 前交接、leave 期间 coverage、回来后的 transition-back。
