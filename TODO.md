@@ -1,209 +1,233 @@
-Below is a polished prompt you can feed to an AI coding agent for this new ASAP2 deal form push project.
+这是 Ant Design Select dropdown，不是普通 <select>，所以不能用 Selenium 的 Select()。要用 点击 selector → 输入/搜索 → 点击下拉 option 的方式。
 
-You are a senior Python automation engineer helping me continue development of an internal Selenium-based ASAP2 automation tool.
-## Project context
-The target website is ASAP2, an internal structured-finance platform.
-ASAP2 has two environments:
-- DEV
-- PROD
-The site hosts approximately 3000 structured finance deal models, each with its own link.
-This project is a **deal form push program**, separate from my earlier export/import project, but it should follow similar engineering patterns:
-- JSON-driven configuration
-- class-based structure
-- batch processing
-- maintainable code
-- robust Selenium automation
-## Current status
-I already have individual working functions for the following actions:
-1. Visit the ASAP2 site
-2. Open a specific deal link
-3. Check/select the appropriate year and month for the data push
-4. Disable payment steps that would interfere with the data push
-5. Open the section where form/input data can be updated
-6. Update data using a `forms.csv` file
-The CSV-driven update currently uses fields such as:
-- deal name
-- form
-- input name
-- input value
-The intended workflow is:
-- for the same deal and form, loop through multiple input names / input values
-- for the same deal, also support multiple forms
-- then continue to the next deal
-## Goal
-Help me design and implement the next version of this tool as a maintainable Python project.
-Do not give only high-level suggestions. Produce concrete, implementation-oriented output with a practical scaffold and code structure.
----
-## What I want built
-### 1. JSON-config-driven design
-I want all major runtime settings to be controlled by a JSON config file, similar to my previous project.
-The config should cover at least:
-- environment selection (DEV / PROD)
-- base URLs
-- login/auth placeholders if needed
-- browser settings
-- headless mode
-- wait timeouts
-- retry settings
-- CSV input file path
-- deal filtering / selection
-- whether to disable payment steps
-- year/month selection behavior
-- logging settings
-- dry-run mode
-- batch size or processing scope if useful
-### 2. Class-based structure
-Refactor the functionality into classes rather than scattered standalone functions.
-Prefer composition over a giant monolithic class.
-A reasonable structure may include classes like:
-- `ConfigLoader`
-- `ASAP2Client` or `ASAP2Session`
-- `DealResolver`
-- `FormPushManager`
-- `FormCsvReader`
-- `NavigationHelper`
-- `BatchRunner`
-You may rename these if a better design fits the repo.
-### 3. CSV-driven grouped processing
-The system should read from `forms.csv` and process updates grouped logically.
-The CSV may contain records like:
-- deal_name
-- form_name
-- input_name
-- input_value
-The tool should be able to:
-- group rows by deal
-- within a deal, group by form
-- within a form, iterate through all input name / input value pairs
-- apply the updates efficiently in the correct order
-### 4. Website workflow automation
-The automated flow should support:
-- selecting DEV or PROD
-- navigating to a deal
-- selecting/checking the correct year and month
-- disabling payment steps if needed for the push
-- navigating to the correct form/update section
-- locating the correct inputs
-- updating values from CSV
-- handling repeated updates across multiple forms for the same deal
-- saving/submitting as appropriate
-### 5. Future maintainability
-The design should be easy to extend later for:
-- different input types
-- additional validation
-- more complex form workflows
-- alternate CSV schemas
-- logging and audit trails
-- screenshots and failure capture
----
-## Required deliverables
-Please provide the following in order.
-### Phase 1: Architecture
-Propose a clean project architecture for this form-push tool.
-Explain the responsibilities of each major module/class briefly.
-Keep it practical and implementation-oriented.
-### Phase 2: Config design
-Design a JSON config schema and provide a realistic `config.json` example.
-The config should support at least:
-- environment
-- base URLs
-- browser/headless
-- timeout/retry
-- file paths
-- CSV schema mapping
-- year/month settings
-- payment-step disable flag
-- logging
-- dry-run
-- optional deal filters
-### Phase 3: CSV handling design
-Design how the program should parse and group `forms.csv`.
-Assume the CSV contains at least:
-- `deal_name`
-- `form_name`
-- `input_name`
-- `input_value`
-Please propose:
-- expected CSV format
-- grouping logic
-- validation rules
-- error handling for missing columns / blank values / duplicate rows
-### Phase 4: Implementation scaffold
-Generate Python code for a practical first-pass scaffold that includes:
-- config loading
-- CSV loading/grouping
-- Selenium session/client setup
-- core navigation methods
-- form push orchestration
-- batch processing entry point
-Use:
-- Python 3.11+
-- type hints
-- dataclasses where appropriate
-- pathlib
-- logging
-- explicit Selenium waits
-- clean exception handling
-### Phase 5: Selenium guidance
-Where actual site locators are unknown, use clearly labeled placeholders/TODOs.
-Do not invent fake certainty for selectors.
-Use placeholder locator names like:
-- `TODO_DEAL_LINK_LOCATOR`
-- `TODO_FORM_SECTION_LOCATOR`
-- `TODO_SAVE_BUTTON_LOCATOR`
-### Phase 6: Deliverables format
-I want the output in a practical form:
-1. proposed folder structure
-2. example `config.json`
-3. example `forms.csv`
-4. code modules split logically
-5. example `main.py`
-6. short explanation of batch form-push flow
-7. short list of next recommended improvements
----
-## Important engineering constraints
-1. Build on my current working functions rather than assuming a full rewrite from scratch.
-2. Preserve flexibility because ASAP2 is an internal site and UI details may evolve.
-3. Do not invent fake Selenium locators without labeling them as placeholders.
-4. Use explicit waits in Selenium, not fragile sleeps unless absolutely necessary.
-5. Prioritize readable, maintainable code over clever abstractions.
-6. Assume this will run in a corporate environment where browser reliability, timing, and local file paths matter.
-7. Use UTF-8 explicitly for text file reads/writes where applicable.
-8. Keep the code modular so I can later reuse patterns from my other ASAP2 projects.
----
-## Desired workflow examples
-### Workflow A: Single-deal push
-- read `forms.csv`
-- filter rows for one deal
-- open deal page
-- set/check year and month
-- disable payment steps if configured
-- loop through relevant forms
-- for each form, update all listed input fields
-- save/apply updates
-### Workflow B: Multi-form push for one deal
-- one deal has multiple forms in the CSV
-- process the forms in grouped order
-- update all fields for each form before moving to the next form
-### Workflow C: Batch push across multiple deals
-- read all rows from CSV
-- group by deal
-- for each deal:
-  - navigate to deal
-  - set/check year and month
-  - disable payment blockers if needed
-  - process each form and its fields
-- continue until all selected deals are processed
----
-## Output style
-Be concrete and code-oriented.
-Show practical code directly.
-Prefer a working scaffold with TODO markers over vague design discussion.
-When making design choices, explain the reason briefly.
-Do not stop at architecture discussion only—produce code I can paste into a project and iterate on immediately.
+你的目标应该是：
 
-You can make it even stronger by adding this one-line prefix before sending it to the agent:
+定位 Processing Date 这个 ant-select
+→ click 打开 dropdown
+→ 输入目标日期，比如 05/26/2026
+→ 点击下拉项
 
-Do not stop at recommendations. Generate a complete first-pass scaffold that I can run and then refine.
+推荐函数：按 label 设置 Processing Date
 
-If you want, I can also convert this into a version optimized specifically for Roo Code, Copilot Agent, or Codex.
+from selenium.webdriver.common.by import By
+from selenium.webdriver.common.keys import Keys
+from selenium.webdriver.common.action_chains import ActionChains
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+def set_processing_date(driver, target_date: str, timeout: int = 20):
+    wait = WebDriverWait(driver, timeout)
+    # 1. 锁定当前打开的 modal
+    modal = wait.until(EC.presence_of_element_located((
+        By.XPATH,
+        "//div[@role='dialog' and @aria-modal='true']"
+    )))
+    # 2. 找到 Processing Date 后面的 ant-select
+    select_box = modal.find_element(
+        By.XPATH,
+        ".//span[contains(@class,'payment-date') and normalize-space()='Processing Date']"
+        "/following-sibling::div[contains(@class,'ant-select')][1]"
+    )
+    # 3. 点击打开 dropdown
+    driver.execute_script(
+        "arguments[0].scrollIntoView({block: 'center', inline: 'center'});",
+        select_box
+    )
+    select_box.click()
+    # 4. 找到 ant-select 内部的 search input
+    input_el = wait.until(EC.presence_of_element_located((
+        By.XPATH,
+        "//input[contains(@class,'ant-select-selection-search-input') "
+        "and @role='combobox']"
+    )))
+    # 5. 输入目标日期
+    input_el.send_keys(Keys.CONTROL, "a")
+    input_el.send_keys(target_date)
+    # 6. 点击 dropdown 里匹配的 option
+    option = wait.until(EC.element_to_be_clickable((
+        By.XPATH,
+        "//div[contains(@class,'ant-select-dropdown') and not(contains(@style,'display: none'))]"
+        f"//div[contains(@class,'ant-select-item-option') "
+        f"and .//div[normalize-space()='{target_date}' or normalize-space()='{target_date}']]"
+    )))
+    option.click()
+    # 7. 可选：确认值已经被设置
+    selected_item = select_box.find_element(
+        By.XPATH,
+        ".//span[contains(@class,'ant-select-selection-item')]"
+    )
+    selected_value = (
+        selected_item.get_attribute("title")
+        or selected_item.text
+    ).strip()
+    if selected_value != target_date:
+        raise RuntimeError(
+            f"Processing Date was not set correctly. "
+            f"Expected {target_date}, got {selected_value}"
+        )
+    return selected_value
+
+调用：
+
+set_processing_date(driver, "05/26/2026")
+
+⸻
+
+如果输入后 dropdown 不过滤，直接点击 option
+
+有些 Ant Design dropdown 是只读输入框，input 虽然存在，但 readonly。这种情况下先打开 dropdown，然后直接找 option：
+
+def set_processing_date_no_typing(driver, target_date: str, timeout: int = 20):
+    wait = WebDriverWait(driver, timeout)
+    modal = wait.until(EC.presence_of_element_located((
+        By.XPATH,
+        "//div[@role='dialog' and @aria-modal='true']"
+    )))
+    select_box = modal.find_element(
+        By.XPATH,
+        ".//span[contains(@class,'payment-date') and normalize-space()='Processing Date']"
+        "/following-sibling::div[contains(@class,'ant-select')][1]"
+    )
+    select_box.click()
+    option = wait.until(EC.element_to_be_clickable((
+        By.XPATH,
+        "//div[contains(@class,'ant-select-dropdown') and not(contains(@style,'display: none'))]"
+        f"//div[contains(@class,'ant-select-item-option') and normalize-space()='{target_date}']"
+    )))
+    option.click()
+
+⸻
+
+如果 option 不在当前可见列表里，需要键盘选择
+
+如果 dropdown 打开后，你能输入日期，但 Selenium 找不到 option，可以用 Enter 提交当前高亮项：
+
+def set_processing_date_by_keyboard(driver, target_date: str, timeout: int = 20):
+    wait = WebDriverWait(driver, timeout)
+    modal = wait.until(EC.presence_of_element_located((
+        By.XPATH,
+        "//div[@role='dialog' and @aria-modal='true']"
+    )))
+    select_box = modal.find_element(
+        By.XPATH,
+        ".//span[contains(@class,'payment-date') and normalize-space()='Processing Date']"
+        "/following-sibling::div[contains(@class,'ant-select')][1]"
+    )
+    select_box.click()
+    input_el = wait.until(EC.presence_of_element_located((
+        By.XPATH,
+        "//input[contains(@class,'ant-select-selection-search-input') and @role='combobox']"
+    )))
+    input_el.send_keys(Keys.CONTROL, "a")
+    input_el.send_keys(target_date)
+    input_el.send_keys(Keys.ENTER)
+
+⸻
+
+更适合你当前截图的简化版
+
+你的这个 input 是：
+
+<input
+  type="search"
+  role="combobox"
+  readonly
+  unselectable="on"
+  class="ant-select-selection-search-input"
+>
+
+这里有一个重要信息：
+
+readonly
+
+所以它大概率不能直接 send_keys 输入。你需要：
+
+select_box.click()
+option.click()
+
+也就是用 dropdown 选，而不是往 input 里打字。
+
+推荐你先用这个：
+
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+def choose_processing_date(driver, target_date: str, timeout: int = 20):
+    wait = WebDriverWait(driver, timeout)
+    modal = wait.until(EC.presence_of_element_located((
+        By.XPATH,
+        "//div[@role='dialog' and @aria-modal='true']"
+    )))
+    select_box = modal.find_element(
+        By.XPATH,
+        ".//span[contains(@class,'payment-date') and normalize-space()='Processing Date']"
+        "/following-sibling::div[contains(@class,'ant-select')][1]"
+    )
+    driver.execute_script(
+        "arguments[0].scrollIntoView({block: 'center'});",
+        select_box
+    )
+    select_box.click()
+    option = wait.until(EC.element_to_be_clickable((
+        By.XPATH,
+        "//div[contains(@class,'ant-select-dropdown') and not(contains(@class,'ant-select-dropdown-hidden'))]"
+        f"//div[contains(@class,'ant-select-item-option') and normalize-space()='{target_date}']"
+    )))
+    option.click()
+    return target_date
+
+调用：
+
+choose_processing_date(driver, "05/26/2026")
+
+⸻
+
+如果点击 option 失败，用 JavaScript click
+
+Ant Design dropdown 经常有遮挡或动画，普通 .click() 有时会失败：
+
+driver.execute_script("arguments[0].click();", option)
+
+替换这里：
+
+option.click()
+
+为：
+
+driver.execute_script("arguments[0].click();", option)
+
+⸻
+
+如果日期不是固定输入，而是想选择下一个 Processing Date
+
+你可以先打开 dropdown，然后读取所有 option：
+
+select_box.click()
+options = wait.until(EC.presence_of_all_elements_located((
+    By.XPATH,
+    "//div[contains(@class,'ant-select-dropdown') and not(contains(@class,'ant-select-dropdown-hidden'))]"
+    "//div[contains(@class,'ant-select-item-option')]"
+)))
+dates = [o.text.strip() for o in options if o.text.strip()]
+print(dates)
+
+然后选择第一个：
+
+options[0].click()
+
+或者选择最后一个：
+
+options[-1].click()
+
+⸻
+
+你这个元素最关键的判断是：
+
+readonly
+
+所以这类 Ant Design dropdown 通常不是“输入框赋值”，而是：
+
+click select → click option
+
+而不是：
+
+send_keys 到 input
