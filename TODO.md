@@ -1,219 +1,825 @@
-你准备 parental leave 时，coverage plan 的核心目标是：让老板和团队清楚知道 你离开期间哪些工作需要继续、谁负责、怎么处理异常、你回来后如何交接回来。
+下面是一份可以直接给 Codex / Roo Code / Cursor Agent 使用的 **English-only agent prompt**。
+
+````markdown
+# Agent Prompt: Refactor ASAP2 Validation Toolkit into Portfolio-Based Functional Framework
+
+You are working in an existing Python / IronPython-compatible repository for ASAP2 / Asset Securitization Analysis Pro validation scripts.
+
+This repo is a half-finished validation framework. Its purpose is to turn many scattered deal/setup/periodic validation scripts into a maintainable, auditable, standardized validation toolkit.
+
+## Current Repository Context
+
+The project currently includes files such as:
+
+- `validation_inventory.md`
+  - Lists existing validation scripts under categories such as SetUp validation and Periodic validation.
+  - Examples include deal name, primary analyst, state code, next index rate, bond balance vs collateral balance, scheduled balance rollover, fee vs actual, etc.
+
+- `validation_function_contract.md`
+  - Defines the standardized validation return contract.
+  - Each validation should return a dictionary, not just True/False.
+  - Standard fields include:
+    - `status`
+    - `passed`
+    - `severity`
+    - `threshold`
+    - `issue_code`
+    - `issue`
+    - `explanation`
+    - `impact`
+    - `action`
+    - `context`
+    - `expected`
+    - `actual`
+
+- `validation_api.py`
+- `ironpython_validation_helpers.py`
+  - Existing helper/API layer.
+  - Currently includes helper logic such as required checks, equality checks, tolerance checks, roll-forward checks, result summarization, and scan finalization.
+  - This layer may currently be class-based or overly complex.
+
+- Example validation scripts:
+  - `validate_next_index_rate.py`
+    - Scans floating-rate bonds and checks whether `NextIndexRate` is missing, blank, or zero.
+  - `SetUpValidationStateCode.py`
+    - Checks whether an asset setup `State` field is a valid US state or territory code.
+
+The existing output can already produce detailed JSON like:
+
+```json
+{
+  "should_interrupt": false,
+  "success": false,
+  "results": [
+    {
+      "explanation": "State code must be populated and must be a valid US state or territory code.",
+      "actual": "NYC",
+      "expected": "Valid US State Code (e.g., CA, NY, TX)",
+      "script_name_display": "SetUpValidationStateCode",
+      "status": "FAIL",
+      "impact": "Invalid state values can break setup quality checks, mapping logic, and downstream reporting.",
+      "issue": "State Code is not valid",
+      "action": "Review the asset setup state value and replace it with a valid US state code.",
+      "issue_code": "SETUP_STATE_CODE_INVALID",
+      "function_key": "set_up_validation_state_code",
+      "passed": false,
+      "severity": "CRITICAL",
+      "context": {
+        "asset_name": "0000000430623073",
+        "field_name": "State"
+      }
+    }
+  ],
+  "summary": {
+    "by_severity": {
+      "CRITICAL": 2
+    },
+    "highest_severity": "CRITICAL",
+    "pass": 0,
+    "fail": 2,
+    "total": 2
+  }
+}
+````
+
+The current output is too verbose by default. The framework needs a cleaner default output and a clearer place to control interruption behavior.
+
+---
+
+# Primary Goal
+
+Refactor and extend this repository into a clean, functional, portfolio-based validation framework.
+
+The final design must allow me to combine arbitrary validation scripts into a configurable "validation portfolio", run the selected portfolio, receive standardized summary output, optionally receive full detail output, and centrally control whether the host system should interrupt/raise an error.
+
+---
+
+# Required Features
+
+## 1. Validation Portfolio Support
+
+Implement the concept of a `validation portfolio`.
+
+A validation portfolio is a named group of validation scripts that can be run together.
+
+Example use cases:
+
+* A setup validation portfolio
+* A periodic validation portfolio
+* A deal onboarding validation portfolio
+* A month-end validation portfolio
+* A custom portfolio combining any selected validations
+
+The portfolio layer should support:
+
+* Portfolio name
+* Portfolio description
+* Ordered list of validation scripts
+* Enable/disable individual validations
+* Optional per-validation parameters
+* Optional portfolio-level output mode
+* Optional portfolio-level interruption policy
+
+Use JSON configuration where appropriate.
+
+Suggested config file:
+
+```json
+{
+  "default_portfolio": "setup_quality",
+  "portfolios": {
+    "setup_quality": {
+      "description": "Setup quality validation portfolio.",
+      "output_mode": "summary",
+      "interrupt_policy": {
+        "enabled": true,
+        "mode": "severity_at_or_above",
+        "severity": "CRITICAL"
+      },
+      "validations": [
+        {
+          "name": "State Code Validation",
+          "script": "SetUpValidationStateCode.py",
+          "enabled": true,
+          "validates": "Asset setup State field must contain a valid US state or territory code.",
+          "params": {}
+        },
+        {
+          "name": "Next Index Rate Validation",
+          "script": "validate_next_index_rate.py",
+          "enabled": true,
+          "validates": "Floating-rate bonds must have a populated and non-zero NextIndexRate.",
+          "params": {}
+        }
+      ]
+    }
+  }
+}
+```
+
+You may adjust the exact config shape if needed, but keep it simple, readable, and IronPython-compatible.
+
+---
+
+## 2. Summary-First JSON Output
+
+The default output must be summary-only.
+
+By default, when a validation portfolio runs, the JSON should show only:
+
+* Portfolio name
+* Overall success/fail
+* Whether the host should interrupt
+* Portfolio-level summary
+* Per-validation summary
+* Validation name
+* What the validation validates
+
+Default output should NOT include every detailed failed record unless explicitly requested.
+
+Default summary output should look similar to this:
+
+```json
+{
+  "portfolio_name": "setup_quality",
+  "success": false,
+  "should_interrupt": true,
+  "output_mode": "summary",
+  "portfolio_summary": {
+    "total_validations": 2,
+    "passed_validations": 0,
+    "failed_validations": 2,
+    "total_records_checked": 125,
+    "total_failures": 3,
+    "highest_severity": "CRITICAL",
+    "by_severity": {
+      "CRITICAL": 3
+    }
+  },
+  "validations": [
+    {
+      "validation_name": "State Code Validation",
+      "script": "SetUpValidationStateCode.py",
+      "validates": "Asset setup State field must contain a valid US state or territory code.",
+      "success": false,
+      "summary": {
+        "pass": 0,
+        "fail": 2,
+        "total": 2,
+        "highest_severity": "CRITICAL",
+        "by_severity": {
+          "CRITICAL": 2
+        }
+      }
+    },
+    {
+      "validation_name": "Next Index Rate Validation",
+      "script": "validate_next_index_rate.py",
+      "validates": "Floating-rate bonds must have a populated and non-zero NextIndexRate.",
+      "success": false,
+      "summary": {
+        "pass": 0,
+        "fail": 1,
+        "total": 1,
+        "highest_severity": "HIGH",
+        "by_severity": {
+          "HIGH": 1
+        }
+      }
+    }
+  ]
+}
+```
+
+A full-detail mode should still be available.
+
+For example:
+
+```json
+{
+  "output_mode": "full",
+  "validations": [
+    {
+      "validation_name": "State Code Validation",
+      "summary": {},
+      "results": []
+    }
+  ]
+}
+```
+
+Support at least these output modes:
+
+* `summary`
+
+  * Default.
+  * Shows portfolio summary and each validation summary only.
+* `full`
+
+  * Shows summary plus all detailed validation result records.
+* `compact`
+
+  * Optional, if easy.
+  * Shows only portfolio-level summary and failed validation names.
+
+---
+
+## 3. Centralize and Simplify Interruption Control
+
+The framework currently has confusing or scattered control over:
+
+* `should_interrupt`
+* `return_results`
+* `interrupt_after_scan`
+* final message generation
+* host-system error triggering
+
+Refactor this so interruption behavior is controlled in exactly one place.
+
+Preferred design:
+
+* Individual validation scripts must never decide whether the host should interrupt.
+* Individual validation scripts only return validation result dictionaries or lists of dictionaries.
+* Portfolio runner collects results.
+* Portfolio finalizer calculates:
+
+  * `success`
+  * `should_interrupt`
+  * summary
+  * display JSON
+  * optional full log payload
+* Only the portfolio finalizer should decide whether to raise/trigger interruption.
+
+Create or refactor a function similar to:
+
+```python
+def finalize_portfolio_scan(portfolio_result, interrupt_policy=None, output_mode="summary", raise_on_interrupt=False):
+    """
+    Central place to:
+    - summarize portfolio results
+    - determine success/failure
+    - determine should_interrupt
+    - build display payload
+    - optionally raise an exception for ASAP2 host interruption
+    """
+```
+
+Interruption policy should be simple and explicit.
+
+Suggested policy shape:
+
+```json
+{
+  "enabled": true,
+  "mode": "severity_at_or_above",
+  "severity": "CRITICAL"
+}
+```
+
+Support at least:
+
+* `none`
+
+  * Never interrupt.
+* `any_fail`
+
+  * Interrupt if any validation fails.
+* `severity_at_or_above`
+
+  * Interrupt if any failure has severity equal to or higher than configured severity.
+* `fail_count_at_or_above`
+
+  * Interrupt if total failure count is greater than or equal to configured count.
+
+Default behavior:
+
+* Output mode: `summary`
+* Interrupt policy: interrupt on `CRITICAL` or worse
+* Do not show full detailed result records by default
+
+The host-facing final message should be concise, for example:
+
+```text
+2 validation errors raised, test failed, download log to view detail
+```
+
+The JSON payload should contain enough summary information to understand which validation failed.
+
+---
+
+## 4. Simplify the API Layer
+
+Refactor `validation_api.py` and related helper modules into a simple functional API.
+
+Important requirement:
+
+* Do NOT use classes.
+* Keep the API as plain functions.
+* Avoid `ValidationHelperApi` class or class-based wrappers.
+* Keep functions small, composable, and IronPython-compatible.
+
+Suggested functional API:
+
+```python
+def make_result(status, passed, severity, issue_code, issue, explanation,
+                impact=None, action=None, context=None, expected=None,
+                actual=None, threshold=None, script_name_display=None,
+                function_key=None):
+    pass
+
+def pass_result(...):
+    pass
+
+def fail_result(...):
+    pass
 
-可以按下面这个结构来做。
+def check_required(value, field_name=None, context=None, severity="HIGH", ...):
+    pass
 
-⸻
+def check_equal(actual, expected, ...):
+    pass
 
-1. 先列出你目前负责的所有工作
+def check_within_tolerance(actual, expected, tolerance, ...):
+    pass
 
-建议分成几类：
+def summarize_results(results):
+    pass
 
-A. 日常运营 / BAU tasks
+def summarize_validation(validation_name, script, validates, results):
+    pass
 
-英文可以写：
+def summarize_portfolio(validation_outputs):
+    pass
 
-Daily BAU responsibilities
+def determine_should_interrupt(summary, interrupt_policy):
+    pass
 
-例如：
+def finalize_validation_scan(results, output_mode="summary"):
+    pass
 
-* Daily deal monitoring
-* Payment / distribution support
-* Client inquiries
-* Internal team requests
-* Reporting / tracking
-* Production issue follow-up
+def finalize_portfolio_scan(portfolio_output, interrupt_policy=None, output_mode="summary", raise_on_interrupt=False):
+    pass
+```
 
-B. 周期性工作 / Recurring tasks
+Keep the API backward-compatible only if it is not too messy. If backward compatibility makes the design confusing, prefer the new clean functional API and update the example scripts accordingly.
 
-Recurring deliverables
+Avoid unnecessary abstraction.
+
+---
+
+## 5. One Public Callable Function Per Validation Script
+
+Enforce a simple convention:
 
-例如：
+Each validation script should expose only one external callable validation function.
+
+Default rule:
 
-* Monthly distribution cycle
-* Quarterly reports
-* Month-end / quarter-end activities
-* Weekly status updates
-* Regular client deliverables
+* The first top-level public function in a validation script is the validation entrypoint.
+* The portfolio runner should call only that first public function.
+* Other helper functions inside that validation script should be treated as private implementation details.
+* Private helper functions should be prefixed with `_`.
 
-C. 项目类工作 / Project work
+Example:
 
-Ongoing projects
+```python
+def validate_state_code(runtime_context=None, params=None):
+    """
+    Public validation entrypoint.
+    This should be the first top-level public function in the file.
+    """
+    pass
 
-例如：
 
-* ASAP2 migration
-* Global function testing
-* Automation tools
-* Reporting enhancement
-* Workflow improvement projects
+def _normalize_state(value):
+    pass
 
-D. 风险较高或需要特别关注的事项
 
-High-priority / time-sensitive items
+def _is_valid_state_code(value):
+    pass
+```
 
-例如：
+Do not make portfolio config require a function name unless absolutely necessary.
 
-* Upcoming launch
-* Client-sensitive deliverables
-* Regulatory or compliance-sensitive items
-* Items with hard deadlines
-* Known issues or dependencies
+Preferred config:
 
-⸻
+```json
+{
+  "script": "SetUpValidationStateCode.py"
+}
+```
 
-2. 给每项工作指定 backup owner
+Not preferred:
 
-你可以做一个表格，最实用：
+```json
+{
+  "script": "SetUpValidationStateCode.py",
+  "function": "set_up_validation_state_code"
+}
+```
 
-Workstream	Description	Frequency	Primary Backup	Secondary Backup	Key Dates	Notes
-Monthly distributions	Support monthly payment/distribution process	Monthly	Name A	Name B	5th BD monthly	Follow standard checklist
-Client inquiries	Respond to client questions	As needed	Name A	Manager	N/A	Escalate urgent items
-ASAP2 testing	Continue testing and issue tracking	Weekly	Name B	Name C	Every Friday	Update tracker
-Reports	Prepare/send recurring reports	Monthly	Name C	Name A	Month-end	Template saved in folder
+If needed, allow an optional `function` override, but the default should be first public function.
 
-⸻
+For source-order detection, do not rely on alphabetical introspection. Implement a robust helper that reads the script source and identifies the first top-level `def` that does not start with `_`.
 
-3. 把每项工作写清楚“怎么做”
+---
 
-不要只写“XX will cover this”。最好写到可以执行的程度：
+## 6. Portfolio Runner
 
-每项工作建议包含：
+Create or refactor a portfolio runner module.
 
-* What needs to be done
-* Where files/tools are located
-* Key contacts
-* Deadline/frequency
-* Step-by-step process or checklist
-* Escalation path
-* Known risks/issues
+Suggested file:
 
-英文模板：
+* `validation_portfolio_runner.py`
 
-For each workstream, I will document the process, key contacts, file locations, recurring deadlines, and escalation points to ensure a smooth transition during my parental leave.
+It should provide plain functions such as:
 
-⸻
+```python
+def load_portfolio_config(config_path):
+    pass
 
-4. 明确哪些事情可以等你回来
+def get_portfolio(config, portfolio_name=None):
+    pass
 
-这点很重要，不然 backup 会被所有事情压垮。
+def load_validation_entrypoint(script_path, function_name=None):
+    pass
 
-你可以分成三档：
+def run_validation_script(validation_config, runtime_context=None):
+    pass
 
-Must continue during leave
+def run_validation_portfolio(portfolio_name=None, config_path=None, runtime_context=None,
+                             output_mode=None, raise_on_interrupt=False):
+    pass
+```
 
-必须继续做。
+The runner should:
 
-Can be handled only if urgent
+1. Load portfolio config.
+2. Resolve selected portfolio.
+3. Iterate through enabled validations in order.
+4. Load each validation script.
+5. Detect the first public function unless an override is provided.
+6. Call the validation function.
+7. Normalize returned output into a list of standardized result dictionaries.
+8. Summarize each validation.
+9. Summarize the whole portfolio.
+10. Finalize output using the centralized finalizer.
+11. Return the payload.
+12. Optionally raise an exception only at the finalizer layer if interruption is required.
 
-只有紧急时处理。
+The runner must be tolerant of validation function return shapes:
 
-Can wait until return
+* Single dict
+* List of dicts
+* Dict containing `results`
+* Empty result / None should be treated as pass only if explicitly intended by the validation design
 
-可以等你回来。
+If a validation script itself crashes, convert that exception into a standardized validation failure result with severity `CRITICAL`, issue code such as `VALIDATION_SCRIPT_RUNTIME_ERROR`, and include script name in context.
 
-英文可以写：
+---
 
-I will categorize my responsibilities into items that must continue during my leave, items that should only be handled if urgent, and items that can wait until my return.
+## 7. Keep IronPython / ASAP2 Host Compatibility
 
-⸻
+This repository is intended to run inside or near ASAP2 / Asset Securitization Analysis Pro, which may use IronPython.
 
-5. 安排 leave 前的 handover meeting
+Therefore:
 
-建议至少安排：
+* Avoid unnecessary third-party packages.
+* Avoid modern Python features that may break IronPython.
+* Avoid dataclasses.
+* Avoid pydantic.
+* Avoid type hints if they reduce compatibility.
+* Avoid f-strings if IronPython 2.7 compatibility is required.
+* Avoid pathlib if compatibility is uncertain.
+* Use plain dict/list/string/number structures.
+* Use standard library only where possible.
+* Use `json` for serialization.
+* Keep file paths simple and explicit.
+* Do not introduce async code.
 
-1. Manager review meeting
-    先和老板确认 coverage strategy。
-2. Backup owner handover meeting
-    给每个 backup 单独讲他们负责的部分。
-3. Team walkthrough meeting
-    整体过一遍 coverage plan、deadlines、escalation path。
+---
 
-英文：
+## 8. Documentation Updates
 
-I will schedule handover sessions with my backup owners and manager to walk through open items, key deadlines, process documentation, and escalation procedures before my leave begins.
+Update or create documentation explaining the new framework.
 
-⸻
+Required docs:
 
-6. 准备一个 central tracker / handover document
+### `validation_portfolio_contract.md`
 
-建议用 Excel、SharePoint、OneNote、Confluence、Teams folder 都可以。
+Explain:
 
-文件名可以叫：
+* What a validation portfolio is
+* Portfolio config format
+* Validation entrypoint convention
+* Output modes
+* Interrupt policies
+* Default behavior
+* Example summary output
+* Example full output
 
-Parental Leave Coverage Plan
-Parental Leave Handover Tracker
-Leave Coverage and Transition Plan
+### Update `validation_function_contract.md`
 
-里面至少包括：
+Clarify:
 
-1. Overview
-2. Leave dates
-3. Coverage contacts
-4. Workstream tracker
-5. Open items
-6. Key deadlines
-7. Escalation path
-8. File/tool locations
-9. Return transition plan
+* Individual validation functions return standardized result dicts or lists of dicts.
+* Individual validation functions do not interrupt the host.
+* Individual validation functions do not decide display output.
+* Individual validation functions should not print final JSON.
+* Portfolio finalizer controls summary/full display and interruption.
 
-⸻
+### Update `validation_inventory.md`
 
-7. 给老板发的英文说明可以这样写
+If needed, add columns or sections for:
 
-Hi [Manager Name],
+* Script file
+* Validation name
+* What it validates
+* Severity
+* Portfolio membership
+* Entrypoint function
 
-As I prepare for my upcoming parental leave, I am putting together a coverage plan to ensure a smooth transition and continuity of key responsibilities while I am out.
+---
 
-My plan is to document my current workstreams, recurring deliverables, open items, key deadlines, process steps, file locations, and escalation contacts. I will also identify primary and secondary backup owners for each area and schedule handover sessions before my leave begins.
+## 9. Example Refactors
 
-I will categorize the work into the following groups:
+Refactor at least these scripts to demonstrate the new pattern:
 
-1. Items that must continue during my leave
-2. Items that should be handled only if urgent
-3. Items that can wait until my return
+* `SetUpValidationStateCode.py`
+* `validate_next_index_rate.py`
 
-I will share a draft coverage tracker with you for review and would appreciate your feedback on backup ownership, prioritization, and any additional areas you would like me to include.
+Each should:
 
-Thanks,
-[Your Name]
+* Have one first public validation function
+* Use the simplified functional API
+* Return standardized result dict/list
+* Not decide interruption
+* Not print final host output directly
+* Not use classes
 
-⸻
+---
 
-8. 你可以用的英文表达
+## 10. Tests / Smoke Tests
 
-中文“我准备 parental leave，我要做交接计划”可以说：
+Add simple tests or smoke scripts that can run outside ASAP2 using mocked data.
 
-I am preparing for my parental leave and would like to create a coverage plan to ensure business continuity during my absence.
+Suggested files:
 
-或者更自然一点：
+* `tests/test_validation_api.py`
+* `tests/test_validation_portfolio_runner.py`
+* `examples/run_setup_quality_portfolio.py`
 
-As I prepare for parental leave, I want to make sure there is a clear coverage plan in place for my responsibilities, open items, recurring deliverables, and escalation points.
+The smoke test should prove:
 
-“谁来接手我的工作”：
+1. A portfolio can combine multiple validations.
+2. Disabled validations are skipped.
+3. Default output is summary-only.
+4. Full output includes detailed result records.
+5. `should_interrupt` is calculated centrally.
+6. `severity_at_or_above` works.
+7. `any_fail` works.
+8. `none` works.
+9. Script runtime exceptions are converted into standardized CRITICAL validation failures.
+10. Only the first public function in a validation script is used by default.
 
-identify backup owners for my key responsibilities
+---
 
-“确保工作不断档”：
+# Important Design Constraints
 
-ensure continuity of key deliverables
+Follow these constraints strictly:
 
-“交接会议”：
+1. Do not use classes.
+2. Do not introduce unnecessary dependencies.
+3. Do not over-engineer.
+4. Preserve ASAP2 / IronPython host compatibility as much as possible.
+5. Keep validation scripts small and readable.
+6. Keep validation business logic separate from portfolio orchestration.
+7. Keep interruption logic centralized.
+8. Keep result display centralized.
+9. Default output must be summary-only.
+10. Full details should be available only when explicitly requested.
+11. Each validation script should expose only its first public function as the callable entrypoint.
+12. The portfolio runner should not require function names in config by default.
+13. If existing behavior conflicts with this design, prefer this new design but document the change.
 
-handover sessions
-transition meetings
-knowledge transfer sessions
+---
 
-“我回来后重新接回来”：
+# Expected Deliverables
 
-return transition plan
-transition-back plan
+Implement the following:
 
-⸻
+1. A simplified functional `validation_api.py`.
+2. A portfolio runner module, preferably `validation_portfolio_runner.py`.
+3. A JSON portfolio config file, preferably `validation_portfolios.json`.
+4. Refactored example validation scripts:
 
-9. 最推荐你的 coverage plan 标题
+   * `SetUpValidationStateCode.py`
+   * `validate_next_index_rate.py`
+5. Centralized finalization logic:
 
-我建议用：
+   * Summary creation
+   * Full output creation
+   * `should_interrupt` calculation
+   * Optional host exception raising
+6. Updated documentation:
 
-Parental Leave Coverage and Transition Plan
+   * `validation_portfolio_contract.md`
+   * Updated `validation_function_contract.md`
+   * Updated `validation_inventory.md` if appropriate
+7. Smoke tests or example scripts proving the framework works.
 
-这个比单纯 “handover plan” 更专业，因为它包含了 leave 前交接、leave 期间 coverage、回来后的 transition-back。
+---
+
+# Suggested Implementation Plan
+
+Proceed in stages.
+
+## Stage 1 — Inspect Existing Code
+
+Read the current repository structure.
+
+Identify:
+
+* Current helper/API functions
+* Current validation result schema
+* Current interruption logic
+* Current example validation scripts
+* Places where output is printed or finalized
+* Places where host interruption is triggered
+
+Do not rewrite business validation logic yet.
+
+## Stage 2 — Refactor API into Plain Functions
+
+Simplify `validation_api.py`.
+
+Remove or bypass class-based API design.
+
+Create small functional helpers for:
+
+* Creating pass/fail results
+* Normalizing result lists
+* Summarizing results
+* Determining highest severity
+* Determining interruption
+* Finalizing validation scan
+* Finalizing portfolio scan
+
+Keep function names explicit and easy to read.
+
+## Stage 3 — Build Portfolio Runner
+
+Create `validation_portfolio_runner.py`.
+
+Implement:
+
+* Config loading
+* Portfolio selection
+* Validation script loading
+* First-public-function detection
+* Validation execution
+* Exception-to-result conversion
+* Per-validation summary
+* Portfolio summary
+* Finalization
+
+## Stage 4 — Add Portfolio Config
+
+Create `validation_portfolios.json`.
+
+Include at least one example portfolio:
+
+* `setup_quality`
+
+Include the refactored state code validation and next index rate validation.
+
+## Stage 5 — Refactor Example Validations
+
+Refactor:
+
+* `SetUpValidationStateCode.py`
+* `validate_next_index_rate.py`
+
+Ensure each has:
+
+* First public validation function as entrypoint
+* Private helpers prefixed with `_`
+* No class
+* No final print
+* No interruption logic
+* Standard result output
+
+## Stage 6 — Add Examples and Tests
+
+Add a runnable example or test using mocked data.
+
+Demonstrate:
+
+```python
+from validation_portfolio_runner import run_validation_portfolio
+
+payload = run_validation_portfolio(
+    portfolio_name="setup_quality",
+    config_path="validation_portfolios.json",
+    runtime_context=mock_context,
+    output_mode="summary",
+    raise_on_interrupt=False
+)
+
+print(payload)
+```
+
+Also demonstrate:
+
+```python
+payload = run_validation_portfolio(
+    portfolio_name="setup_quality",
+    config_path="validation_portfolios.json",
+    runtime_context=mock_context,
+    output_mode="full",
+    raise_on_interrupt=False
+)
+```
+
+---
+
+# Acceptance Criteria
+
+The refactor is successful only if all of the following are true:
+
+1. I can define a validation portfolio in JSON.
+2. I can combine arbitrary validation scripts into one portfolio.
+3. I can enable or disable validations in the portfolio config.
+4. I can run a selected portfolio by name.
+5. The default JSON output is summary-only.
+6. The summary output includes each validation’s name and what it validates.
+7. The detailed failed records are hidden by default.
+8. Full details are available when `output_mode="full"`.
+9. Interruption behavior is controlled centrally in one finalizer function.
+10. Individual validation scripts do not control interruption.
+11. Individual validation scripts do not print final output.
+12. The API layer is functional, not class-based.
+13. The framework does not require each validation function name to be listed in config.
+14. By default, the first public function in each validation script is the external callable entrypoint.
+15. Script runtime errors are converted into standardized CRITICAL validation results.
+16. The code remains simple and compatible with ASAP2 / IronPython constraints.
+17. The example state code validation and next index rate validation both work under the new structure.
+18. There is at least one smoke test or example proving summary mode and full mode.
+
+---
+
+# Output Style for Your Work
+
+When you finish, provide:
+
+1. A concise summary of changed files.
+2. The new recommended execution flow.
+3. The exact command or script to run the smoke test.
+4. Example summary JSON output.
+5. Example full JSON output.
+6. Any compatibility concerns for IronPython / ASAP2 host execution.
+
+Do not stop after only planning. Implement the refactor directly.
+
+```
+```
