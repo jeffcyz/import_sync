@@ -1,0 +1,5 @@
+*.bak
+*.pending.xlam
+~$*
+build/.import/
+*.log

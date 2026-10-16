@@ -1,0 +1,17 @@
+Option Explicit
+
+Private Sub Workbook_Open()
+    InitializeAutoColorAddin
+End Sub
+
+Private Sub Workbook_AddinInstall()
+    InitializeAutoColorAddin
+End Sub
+
+Private Sub Workbook_AddinUninstall()
+    Auto_Close
+End Sub
+
+Private Sub Workbook_BeforeClose(Cancel As Boolean)
+    Auto_Close
+End Sub

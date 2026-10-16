@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<customUI xmlns="http://schemas.microsoft.com/office/2006/01/customui"
+          onLoad="RibbonOnLoad">
+  <ribbon>
+    <tabs>
+      <tab idMso="TabDeveloper">
+        <group id="grpAutoColorOnEntry" label="AutoColor">
+          <toggleButton id="tglAutoColorCurrentWorkbook"
+                        label="Current Workbook"
+                        size="large"
+                        imageMso="FontColorPicker"
+                        screentip="Turn AutoColor on or off for the current workbook"
+                        supertip="This setting affects only the current workbook. AutoColor starts off each time Excel opens."
+                        onAction="RibbonToggleAutoColor"
+                        getPressed="RibbonGetAutoColorPressed"/>
+          <button id="btnAutoColorEnableAndScan"
+                  label="Enable and Scan"
+                  size="large"
+                  imageMso="RefreshAll"
+                  screentip="Enable AutoColor and process existing content in the current workbook"
+                  onAction="RibbonEnableAndScan"/>
+          <menu id="mnuAutoColorScan"
+                label="Scan Existing Content"
+                size="large"
+                imageMso="FindDialog">
+            <button id="btnAutoColorScanWorkbook"
+                    label="Entire Workbook"
+                    onAction="RibbonScanWorkbook"/>
+            <button id="btnAutoColorScanSheet"
+                    label="Current Worksheet"
+                    onAction="RibbonScanSheet"/>
+            <button id="btnAutoColorScanSelection"
+                    label="Selected Range"
+                    onAction="RibbonScanSelection"/>
+          </menu>
+          <button id="btnAutoColorStatus"
+                  label="Status"
+                  screentip="Show the AutoColor status for the current workbook"
+                  onAction="RibbonShowStatus"/>
+        </group>
+      </tab>
+    </tabs>
+  </ribbon>
+</customUI>
