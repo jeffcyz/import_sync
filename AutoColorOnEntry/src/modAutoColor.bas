@@ -28,7 +28,6 @@ Private gProcessing As Boolean
 Private Const AUTO_COLOR_MAX_IMMEDIATE_CELLS As Long = 10000
 Private Const AUTO_COLOR_QUEUE_BATCH_SIZE As Long = 2500
 Private Const AUTO_COLOR_JOB_MAX_CELLS As Long = 250000
-Private Const AUTO_COLOR_MAX_TOTAL_QUEUE As Long = 2000000
 Private Const AUTOCOLOR_TEXT_INPUTS As Boolean = False
 
 Private Enum AutoColorClass
@@ -318,7 +317,7 @@ Public Sub ScanCurrentWorkbook()
     If rejectedSheets > 0 Then
         Application.StatusBar = "AutoColor scan incomplete: " & _
                                 CStr(rejectedSheets) & _
-                                " worksheet(s) could not be processed or queued. Scan smaller ranges."
+                                " worksheet(s) could not be processed or queued. Retry the affected worksheets."
     ElseIf QueuedCellCount() > 0 Then
         Application.StatusBar = "AutoColor scan queued for " & wb.Name & _
                                 " (non-empty cells only)"
@@ -547,6 +546,9 @@ Private Function QueueOrColorRange(ByVal target As Range, _
         Exit Function
     End If
 
+    ' A Rows/Columns range can count rows/columns rather than individual cells.
+    Set target = target.Cells
+
     If target.CountLarge <= AUTO_COLOR_MAX_IMMEDIATE_CELLS Then
         AutoColorRange target
 
@@ -556,13 +558,6 @@ Private Function QueueOrColorRange(ByVal target As Range, _
         End If
 
         QueueOrColorRange = True
-        Exit Function
-    End If
-
-    If target.CountLarge + QueuedCellCount() > AUTO_COLOR_MAX_TOTAL_QUEUE Then
-        Application.StatusBar = "AutoColor queue limit reached; this range was not queued (" & _
-                                Format$(target.CountLarge, "#,##0") & _
-                                " cells). Scan a smaller selection."
         Exit Function
     End If
 
@@ -598,7 +593,7 @@ Private Sub AddRangeToQueue(ByVal target As Range)
                 rowsThisJob = area.Rows.Count - rowStart + 1
             End If
 
-            Set chunk = area.Rows(rowStart).Resize(rowsThisJob, area.Columns.Count)
+            Set chunk = area.Rows(rowStart).Resize(rowsThisJob, area.Columns.Count).Cells
             AddQueueJob chunk
         Next rowStart
     Next area
@@ -619,7 +614,7 @@ Private Sub AddQueueJob(ByVal target As Range)
     job.WorksheetIndex = ws.Index
     job.TargetAddress = target.Address(False, False, xlA1)
     job.NextCellIndex = 1
-    job.TotalCells = CLng(target.CountLarge)
+    job.TotalCells = CLng(target.Cells.CountLarge)
 
     gColorQueue.Add job
 End Sub

@@ -138,6 +138,19 @@ try {
     Assert-Result 'Blank gap is excluded from recoloring' `
         $first.Range('E1:E5001').Font.Color $purple
 
+    $first.Range('H1:J4000').Value2 = 7
+    $null = $first.Range('H1:J4000').Select()
+    $excel.Run($prefix + 'ScanCurrentSelection')
+    $deadline = (Get-Date).AddSeconds(25)
+    do {
+        Start-Sleep -Seconds 1
+        $remaining = [double]$excel.Run($prefix + 'TestPendingCount')
+    } while ($remaining -gt 0 -and (Get-Date) -lt $deadline)
+    Assert-Result 'Multi-column background scan colors its entire rectangle' `
+        $first.Range('H1:J4000').Font.Color 16711680
+    Assert-Result 'Multi-column background scan reaches the final cell' `
+        $first.Range('J4000').Font.Color 16711680
+
     $excel.Run($prefix + 'EnableAutoColorForCurrentWorkbook')
     $first.Range('D1').ClearContents()
     Assert-Result 'Automatic deletion still clears stale managed colors' `
