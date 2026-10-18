@@ -1,39 +1,123 @@
-我建议这封回复直接呼应 Rani 提出的 Alternative Approach，说明你们更倾向于将 deal-level configuration 与 Global Function execution parameters 分开管理。
+# Role
+Act as a Senior Software Architect and VS Code Workspace Organization Consultant.
 
-重点是：每个 Global Function 只负责独立的 validation logic 和结果，deal-specific inputs 通过对应字段或配置关联；ValidationEngine 负责 portfolio 的组织、执行和统一 reporting。
+I currently have a large VS Code multi-root workspace named `TOTAL`, containing numerous Python, SQL, ASAP 2.0 (IronPython), automation, validation, deal-specific scripting, and developer-tool projects.
 
-Hi Rani and Jake,
+Over time, unrelated projects, experimental code, shared functions, and different versions of similar tools have accumulated in this single workspace.
 
-I think our approach is more aligned with the alternative you proposed, where we separate deal-level input configuration from the actual parameters passed into Global Functions.
+**My goal is to reorganize these projects into smaller, logically cohesive VS Code Workspaces, without unnecessarily merging independent Git repositories.**
 
-Our main concern with passing too many parameters directly into validation functions is scalability and maintainability. As a validation becomes more complex, the number of required parameters can grow significantly. Since different deals may have different requirements, managing those parameters, their order, and their values across multiple deals could become increasingly difficult.
+## Phase 1 — Project Discovery
 
-For example, consider a validation that reconciles bond balances against collateral balances. Different deals may have different tolerance thresholds, rounding conventions, or exclusions. If all these settings are passed directly into the function, we could end up with something like:
+Inspect ALL accessible project roots in the current VS Code Workspace.
 
-validate_balance(bonds, assets, period, tolerance, rounding, exclusions, ...)
+For each project, examine relevant evidence such as:
 
-Any changes to those inputs would then require us to review how the function is called across the relevant deals.
+- Folder structure and filenames
+- README and project documentation
+- Main scripts, modules, classes, and functions
+- Imports and dependencies
+- Configuration files and test structure
+- Git repository boundaries, where accessible
+- Similarities with other projects
+- Business purpose and intended workflow
 
-Instead, our idea is to associate the required inputs with the corresponding deal-level or period-level fields, allowing each validation function to retrieve the values it needs without exposing a long list of parameters in every function call.
+Use an efficient inspection strategy: start with metadata and directory structures, then inspect representative source files as needed. Exclude generated files, binary outputs, virtual environments, and large datasets.
 
-Under this structure:
+Do not read or reproduce credentials, connection strings, sensitive records, or confidential business data unnecessarily.
 
-* Individual Global Functions handle specific validation rules, require minimal input parameters, and return standardized validation results.
-* Deal-level configurations or field mappings determine which input values each validation uses, including any deal-specific requirements.
-* ValidationEngine organizes these functions into validation portfolios based on asset class, shelf, or deal requirements, and centrally manages execution, result aggregation, and reporting.
+Create a Project Inventory that includes:
 
-This would allow us to maintain individual validation logic independently while keeping the overall validation framework consistent across deals.
+| Current Project | Primary Purpose | Functional Category | Related Projects | Git Status | Confidence |
 
-For example, instead of maintaining multiple validation function calls and their parameters separately within each deal, we could associate the appropriate validation portfolio with that deal or shelf. The engine would then execute the relevant Global Functions and generate a consolidated report, including individual validation summaries and error details when requested.
+Do not infer project functionality solely from its folder name. Mark ambiguous classifications as requiring further inspection.
 
-This also makes future maintenance easier. If a validation rule needs to be updated, we can modify the corresponding Global Function. If a deal requires a different validation combination, we can adjust its portfolio configuration without changing the underlying validation functions.
+## Phase 2 — Relationship and Dependency Analysis
 
-The goal is to minimize deal-level script maintenance while keeping the validation logic modular, reusable, and centrally manageable.
+Analyze the relationships between projects and identify:
 
-I think the structured deal-level input approach you suggested could work well with this ValidationEngine design, particularly if Global Functions can access the applicable configured fields through a shared data object.
+1. Projects supporting the same business workflow.
+2. Projects sharing common libraries, functions, or data structures.
+3. Projects with overlapping or duplicated functionality.
+4. Older versions or experimental derivatives of active projects.
+5. Standalone utilities that should remain independently maintained.
+6. Projects that should share a development workspace but not necessarily a Git repository.
+7. Projects that should remain isolated due to differences in runtime, dependencies, confidentiality, or development lifecycle.
 
-Thanks!
+Pay special attention to ASAP validation, general functions (GF), deal scripting, PayRule, reporting, data pipelines, SQL utilities, developer automation, and AI-assisted development.
 
-这里我特意没有说所有 deal-specific parameters 都可以完全取消，因为不同 deal 的 tolerance、exceptions 等依然需要有地方保存。真正需要避免的是 在每个 deal 的 script call 中重复维护这些参数。
+Distinguish confirmed relationships from plausible but unverified ones.
 
-这样回应 Rani 也更有针对性：你们支持她提出的 shared data object 方向，而你开发的 ValidationEngine 是在此基础上实现 validation function 的组合、执行和 reporting，两者是互补关系，而不是两套互相竞争的方案。
+## Phase 3 — Workspace Architecture Proposal
+
+Propose a practical, scalable grouping of the current projects into a smaller number of purpose-driven VS Code Workspaces.
+
+**Do not assume a fixed number of Workspaces.** Determine the most suitable structure based on the actual findings.
+
+Optimize for:
+
+- High functional cohesion within each Workspace
+- Low coupling between Workspaces
+- Clear business and technical ownership
+- Focused GitHub Copilot / Codex context
+- Independent Git repository management
+- Shared-code reuse without unnecessary duplication
+- Ease of navigation and long-term maintainability
+- Minimal disruption to currently working projects
+
+Clearly differentiate:
+
+- VS Code Workspace boundaries
+- Git Repository boundaries
+- Shared libraries and modules
+- Deal-specific configurations
+- Temporary experiments and archived projects
+
+Do not recommend merging repositories merely because they belong to the same Workspace.
+
+## Phase 4 — Proposed Organization
+
+Provide the following deliverables:
+
+### A. Recommended Workspace Groups
+For each proposed Workspace, explain its scope, purpose, included projects, and why they belong together.
+
+### B. Complete Project-to-Workspace Mapping
+Map EVERY existing project root to a proposed Workspace, including ambiguous, duplicate, experimental, and archival candidates. No project should be omitted.
+
+### C. Recommended Folder and Repository Structure
+Provide a proposed directory tree, preserving existing Git repository identities wherever appropriate.
+
+### D. Cross-Project Dependencies
+Identify shared functions, reusable components, overlapping tools, and opportunities for consolidation. Separate confirmed duplication from suspected duplication.
+
+### E. Migration Plan
+Provide a staged, low-risk migration strategy, prioritizing changes that improve organization without modifying source code.
+
+### F. Proposed VS Code Workspace Files
+Show example `.code-workspace` configurations referencing the existing physical paths, so I can implement the grouping before physically moving any directories.
+
+### G. Risks and Open Questions
+Flag uncertain project classifications, Git risks, external dependencies, and items requiring my decision.
+
+## Constraints
+
+- **READ-ONLY ANALYSIS ONLY.**
+- Do NOT move, rename, delete, or create project files.
+- Do NOT modify Git repositories, branches, remotes, or histories.
+- Do NOT install dependencies or execute project code.
+- Do NOT implement any changes in this phase.
+- Do NOT assume projects with similar names have identical functionality.
+- Do NOT force unrelated projects into the same repository.
+- If a project is inaccessible, explicitly identify the limitation.
+- Do not expose proprietary code or confidential data in the analysis.
+
+## Expected Output
+
+Produce a detailed architecture assessment and an actionable reorganization plan.
+
+Start with an executive summary and proposed Workspace grouping, followed by the complete project mapping and migration recommendations.
+
+Conclude with your recommended architecture and the key decisions requiring my approval.
+
+**Stop after presenting the plan. Wait for my explicit approval before making any changes.**
