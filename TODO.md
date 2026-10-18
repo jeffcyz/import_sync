@@ -1,35 +1,216 @@
-# Task: Implement VS Code Workspace Reorganization and Master Synchronization
+# Task: Fix Python 3.14.4 Interpreter Configuration and Finalize VS Code Workspace Environment
 
-## 1. Objective
+## 0. Execution Priority
 
-Act as a Senior VS Code Workspace Architect.
+Act as a Senior VS Code Configuration Engineer, Python Environment Specialist, and Developer Workspace Architect.
 
-Implement the previously analyzed Workspace Reorganization Plan for my existing `TOTAL` VS Code multi-root Workspace containing 29 project roots.
+This task has TWO major objectives, which must be performed in order:
 
-This is an **approved implementation task**, not another architecture assessment.
+**Priority 1 — Diagnose and repair my existing Python 3.14.4 interpreter configuration failure.**
 
-My objective is strictly **Workspace organization and synchronization**, NOT code migration, refactoring, or runtime validation.
+**Priority 2 — Finalize and verify the previously implemented nine-Workspace architecture, ensuring all Workspaces use my existing VS Code development environment consistently.**
 
-The final architecture must contain:
+Do not restart completed work unnecessarily.
 
-- 8 specialized VS Code Workspaces for focused development.
-- 1 permanent Master Workspace for global searching and cross-project GitHub Copilot analysis.
-- 1 lightweight Python synchronization utility to automatically aggregate specialized Workspace project references into the Master Workspace.
+My Workspace reorganization has already been implemented, and the previous validation reported:
 
-All nine `.code-workspace` descriptor files and the synchronization utility must reside in:
+- 9 Workspace descriptors exist.
+- 29 unique project roots are assigned.
+- No duplicate assignments.
+- No missing directories.
+- `38-Master` is synchronized.
+- No project source code or Git repositories were modified.
 
-`H:\Analytics\xChen\30-39 Projects\38 Workspaces`
-
-**This directory is mandatory. Do not create another Workspace configuration directory elsewhere.**
+Preserve these results.
 
 ---
 
-## 2. Final Directory Structure
+# PART I — PYTHON 3.14.4 INTERPRETER REPAIR
 
-Create the following structure:
+## 1. Current Problem
+
+In my existing VS Code environment, I attempted to switch the Python interpreter to Python 3.14.4 using:
+
+`Python: Select Interpreter`
+
+VS Code recognizes the available Python 3.14.4 installation, but selecting it fails.
+
+The displayed error is:
+
+`Failed to set interpreter path. Error: Unable to write into user settings.`
+
+The interpreter selection interface currently shows:
+
+- A previously selected CitiSoftware Python 3.12 interpreter.
+- A recommended CitiSoftware Python 3.14.4 interpreter.
+- A global CitiSoftware Python 3.14.4 interpreter.
+- A separate Anaconda base Python 3.7.3 environment.
+
+The expected Python 3.14.4 installation appears under a path similar to:
+
+`%LOCALAPPDATA%\CitiSoftware\CTC7013_PYTHON_3.14.4\python.exe`
+
+Discover and verify the exact physical path rather than assuming it.
+
+**My desired default Python version is 3.14.4, using the existing CitiSoftware installation.**
+
+Do not install a new Python interpreter or replace the CitiSoftware distribution.
+
+## 2. Diagnose the Root Cause First
+
+Before changing any configuration, investigate why VS Code cannot write the selected interpreter setting.
+
+Inspect the relevant configuration and environment:
+
+1. Current VS Code executable and environment.
+2. Active VS Code Profile.
+3. Effective User Settings location.
+4. Current Workspace Settings.
+5. Existing Python extension settings.
+6. `python.defaultInterpreterPath`.
+7. Python interpreter selection state.
+8. Current Python extension output and relevant error logs.
+9. Whether User Settings or their parent directory are read-only.
+10. Relevant Windows file permissions and ownership.
+11. JSON/JSONC syntax validity of the settings file.
+12. Conflicting settings or stale Python interpreter references.
+13. Whether VS Code is using a custom user-data directory or managed corporate configuration.
+14. Whether enterprise policy or administrative restrictions prevent writing to User Settings.
+
+Also examine the complete error details, not just the truncated VS Code notification.
+
+Distinguish a VS Code settings write failure from a Python executable or interpreter initialization failure.
+
+Do not assume the Python 3.14.4 installation is corrupt merely because selecting it fails.
+
+## 3. Verify the Existing Python 3.14.4 Installation
+
+Locate the existing CitiSoftware Python 3.14.4 executable.
+
+Verify:
+
+- The executable exists.
+- It can be launched.
+- It reports Python 3.14.4.
+- A basic interpreter command executes successfully.
+- The interpreter can enter an interactive REPL.
+
+Use only minimal, non-destructive commands.
+
+For example, after resolving the actual path:
+
+```powershell
+& "<verified-python-3.14.4-path>" --version
+```
+
+Do not run project scripts.
+
+Do not install packages.
+
+Do not modify the Python installation.
+
+Do not confuse the Anaconda Python 3.7.3 environment with the intended Python 3.14.4 installation.
+
+## 4. Repair Strategy
+
+Apply the least intrusive supported correction.
+
+### Preferred Solution — Repair Existing User/Profile Configuration
+
+If the problem is caused by a safely correctable configuration issue:
+
+1. Identify the exact faulty setting or configuration.
+2. Preserve the existing settings.
+3. Back up any settings file before modifying it.
+4. Correct the specific configuration problem.
+5. Restore the ability to select Python interpreters normally.
+6. Configure the existing CitiSoftware Python 3.14.4 as the desired default interpreter.
+7. Preserve all unrelated Python, Copilot, extension, and editor settings.
+
+Do not overwrite the entire settings file.
+
+Do not reset my VS Code Profile.
+
+Do not modify permissions broadly or weaken corporate security controls.
+
+If the settings file is enterprise-managed, do not bypass management restrictions.
+
+### Fallback Solution — Workspace-Level Interpreter Configuration
+
+If User Settings cannot safely be modified, configure Python 3.14.4 at the Workspace level using supported VS Code and Python extension mechanisms.
+
+Use the verified absolute Python 3.14.4 executable path.
+
+Apply the correct default interpreter configuration to all nine Workspaces where appropriate.
+
+Preserve existing project-specific interpreter settings and do not overwrite an intentionally different environment without identifying the conflict.
+
+Be aware that `python.defaultInterpreterPath` may not override an interpreter already stored in Python extension Workspace state.
+
+If necessary, use the supported Python extension commands to update or clear stale Workspace interpreter selection.
+
+Do not directly manipulate undocumented extension storage or VS Code internal databases.
+
+If manual VS Code UI selection is necessary, provide exact instructions.
+
+### Important
+
+Do not claim the problem is fixed merely because `python.defaultInterpreterPath` was written successfully.
+
+The intended interpreter must actually be selectable and usable.
+
+If the actual User Settings write failure remains unresolved, explicitly report it even if a Workspace-level workaround succeeds.
+
+## 5. Python Interactive Window, REPL, and Kernel
+
+My VS Code environment uses Python interactively.
+
+Distinguish these three mechanisms:
+
+1. Python interpreter selected by the Python extension.
+2. Terminal-based Python REPL.
+3. Python Interactive Window / Jupyter kernel selection.
+
+Ensure that the terminal-based Python REPL uses Python 3.14.4.
+
+Where an existing compatible kernel is available, allow the Python Interactive Window to use Python 3.14.4 as well.
+
+Do not assume that selecting an interpreter automatically changes an already running Interactive Window kernel.
+
+Do not install Jupyter, ipykernel, or any additional packages without my explicit approval.
+
+If the Interactive Window needs additional packages that are not installed, report that separately without blocking the main interpreter repair.
+
+## 6. Python Repair Acceptance Criteria
+
+The Python repair is successful when:
+
+1. The actual CitiSoftware Python 3.14.4 executable is identified.
+2. The interpreter launches successfully.
+3. Its reported version is Python 3.14.4.
+4. VS Code can use it through a supported configuration mechanism.
+5. A new integrated terminal Python REPL launches using Python 3.14.4.
+6. The interpreter configuration persists appropriately when reopening the Workspace.
+7. Existing Python installations and environments are preserved.
+8. Other VS Code settings remain unchanged.
+9. Any unresolved User Settings write restriction is explicitly documented.
+
+**Complete this diagnosis and repair before proceeding to the Workspace environment review.**
+
+---
+
+# PART II — EXISTING WORKSPACE ARCHITECTURE
+
+## 7. Mandatory Directory
+
+All Workspace descriptors must be located at:
+
+`H:\Analytics\xChen\30-39 Projects\38 Workspaces`
+
+The established structure is:
 
 ```text
-H:\Analytics\xChen\30-39 Projects\38 Workspaces\
+38 Workspaces/
 │
 ├── 38-Master.code-workspace
 │
@@ -46,441 +227,597 @@ H:\Analytics\xChen\30-39 Projects\38 Workspaces\
 └── sync_master_workspace.py
 ```
 
-All project source directories must remain in their existing physical locations.
+These files should already exist.
 
-The `.code-workspace` files should reference those locations rather than moving or copying project contents.
+Inspect and preserve them.
 
-Use relative paths wherever practical and valid. If a project is located on a different drive, use its existing absolute path.
+Do not recreate or overwrite valid existing descriptors unnecessarily.
 
----
+Do not create another Workspace directory.
 
-## 3. Specialized Workspace Architecture
+## 8. Approved Project Membership
 
-Implement exactly the following eight specialized Workspaces.
+Preserve the following project assignments.
 
-### Workspace 1: ASAP2-Standards
+### ASAP2-Standards — 9 Projects
 
-File: `ASAP2-Standards.code-workspace`
+- py-shared-functions
+- cutoff-gf
+- stop-advance
+- payrule-editor
+- payrule-testing
+- periodic-func-repo
+- batch-fix
+- strat-editor
+- remit-editor
 
-Include these 9 project roots:
+### ASAP2-Deals — 5 Projects
 
-1. `py-shared-functions`
-2. `cutoff-gf`
-3. `stop-advance`
-4. `payrule-editor`
-5. `payrule-testing`
-6. `periodic-func-repo`
-7. `batch-fix`
-8. `strat-editor`
-9. `remit-editor`
+- waterfall-harness
+- barc-maker
+- jpmm-training
+- cars-migration
+- sample-deals
 
-### Workspace 2: ASAP2-Deals
+### ASAP2-AALC-Checker — 1 Project
 
-File: `ASAP2-Deals.code-workspace`
+- aalc-checker
 
-Include these 5 project roots:
+### ASAP2-Platform-Automation — 2 Projects
 
-1. `waterfall-harness`
-2. `barc-maker`
-3. `jpmm-training`
-4. `cars-migration`
-5. `sample-deals`
+- dev-deals-import
+- asap2-live-tools
 
-### Workspace 3: ASAP2-AALC-Checker
+### ASAP2-Validation-Engineering — 2 Projects
 
-File: `ASAP2-AALC-Checker.code-workspace`
+- validation-prompts
+- validation-platform
 
-Include only:
+### Data-ETL — 3 Projects
 
-1. `aalc-checker`
+- bny-download
+- cmbs-data-room
+- oracle-loader
 
-This project must remain independent from `ASAP2-Deals`.
+### Office-Reporting-Automation — 3 Projects
 
-### Workspace 4: ASAP2-Platform-Automation
+- vba-shared-functions
+- deal-dashboard
+- fees-invoice
 
-File: `ASAP2-Platform-Automation.code-workspace`
+### Developer-Tools — 4 Projects
 
-Include these 2 project roots:
+- repo-code-images
+- sql-schema-ai-exporter
+- import-sync
+- setup-sandbox
 
-1. `dev-deals-import`
-2. `asap2-live-tools`
+These names are Workspace folder aliases.
 
-### Workspace 5: ASAP2-Validation-Engineering
+Preserve the already resolved actual physical paths.
 
-File: `ASAP2-Validation-Engineering.code-workspace`
+Do not rename source folders to match aliases.
 
-Include these 2 project roots:
+All 29 projects should appear exactly once across the eight specialized Workspaces.
 
-1. `validation-prompts`
-2. `validation-platform`
-
-### Workspace 6: Data-ETL
-
-File: `Data-ETL.code-workspace`
-
-Include these 3 project roots:
-
-1. `bny-download`
-2. `cmbs-data-room`
-3. `oracle-loader`
-
-### Workspace 7: Office-Reporting-Automation
-
-File: `Office-Reporting-Automation.code-workspace`
-
-Include these 3 project roots:
-
-1. `vba-shared-functions`
-2. `deal-dashboard`
-3. `fees-invoice`
-
-### Workspace 8: Developer-Tools
-
-File: `Developer-Tools.code-workspace`
-
-Include these 4 project roots:
-
-1. `repo-code-images`
-2. `sql-schema-ai-exporter`
-3. `import-sync`
-4. `setup-sandbox`
-
-**Important:** These names are Workspace folder aliases from the previously completed project discovery.
-
-Resolve each alias against its actual existing physical project path.
-
-Do not assume that aliases match physical directory names.
-
-The eight specialized Workspaces must collectively contain exactly 29 existing project roots, each assigned to exactly one specialized Workspace.
+All 29 should also appear in `38-Master`.
 
 ---
 
-## 4. Master Workspace
+# PART III — COMMON VS CODE ENVIRONMENT
 
-Rename the existing:
+## 9. Fundamental Requirement
 
-`TOTAL.code-workspace`
+**All nine Workspaces must provide the same general development environment as my current VS Code environment.**
 
-to:
+The currently active VS Code Profile and its existing preferences are the reference.
 
-`38-Master.code-workspace`
+Preserve and consistently apply:
 
-Place the renamed descriptor in:
+- Keyboard shortcuts.
+- Installed extensions.
+- Extension configuration.
+- GitHub Copilot settings.
+- Python extension settings.
+- Editor preferences.
+- Terminal configuration.
+- UI appearance.
+- Git integration.
+- Language-specific settings.
+- Existing development conveniences.
 
-`H:\Analytics\xChen\30-39 Projects\38 Workspaces`
+However, do not blindly copy every setting into every `.code-workspace` file.
+
+Use the appropriate VS Code configuration scope.
+
+## 10. VS Code Profile
+
+Identify the currently active VS Code Profile.
+
+All nine Workspaces should use the same existing Profile where supported.
+
+Do not create nine separate Profiles.
+
+Do not reset or replace the current Profile.
+
+If Workspace-to-Profile association requires a supported VS Code UI action, provide exact instructions rather than modifying undocumented internal VS Code state.
+
+The shared Profile should provide common:
+
+- Extensions.
+- Personal settings.
+- Keyboard shortcuts.
+- Theme.
+- Editor behavior.
+- Copilot preferences.
+- Terminal preferences.
+
+## 11. Settings Scope and Precedence
+
+Follow this configuration hierarchy:
+
+| Configuration | Preferred Scope |
+|---|---|
+| Keyboard shortcuts | User / Profile |
+| Installed extensions | User / Profile |
+| General extension settings | User / Profile |
+| Theme, fonts, editor preferences | User / Profile |
+| General Copilot preferences | User / Profile |
+| Python 3.14.4 default | User / Profile if safely writable; otherwise supported Workspace configuration |
+| Workspace project membership | Individual .code-workspace |
+| Terminal startup tasks | Individual .code-workspace |
+| Master synchronization task | 38-Master |
+| Project-specific settings | Existing relevant folder or Workspace |
+
+Preserve the effective settings precedence.
+
+Do not migrate settings to another scope without considering their impact.
+
+Do not make unrelated global setting changes.
+
+## 12. Keyboard Shortcuts
+
+Preserve all existing keyboard shortcuts, including custom and extension-contributed shortcuts.
+
+Do not attempt to insert unsupported keyboard shortcut definitions into `.code-workspace` files.
+
+The goal is that switching between the nine Workspaces does not change my normal keyboard shortcuts.
+
+## 13. Extensions
+
+All nine Workspaces should have access to my existing installed extensions.
+
+Preserve the current configuration of:
+
+- GitHub Copilot.
+- GitHub Copilot Chat.
+- Python.
+- Python Debugger.
+- Pylance.
+- SQL extensions.
+- Git extensions.
+- Other existing installed extensions.
+
+Do not install, remove, disable, enable, or update extensions unless separately authorized.
+
+Do not confuse Workspace extension recommendations with installed extensions.
+
+Preserve existing extension settings and their appropriate scope.
+
+## 14. GitHub Copilot
+
+Preserve the current effective GitHub Copilot environment.
+
+This includes, where configured and supported:
+
+- Copilot Chat preferences.
+- Agent Mode settings.
+- Available model preferences.
+- Agent instructions.
+- Custom instructions and prompt references.
+- Tool permissions.
+- Confirmation requirements.
+- Code search and context behavior.
+- Terminal integration.
+
+Do not copy project-specific instructions into unrelated Workspaces.
+
+Do not broaden access to sensitive or proprietary materials.
+
+The specialized Workspaces should provide focused project context.
+
+`38-Master` should remain available for cross-project analysis and global searching.
+
+Do not reset Copilot's existing settings.
+
+## 15. Editor and UI Preferences
+
+Preserve existing:
+
+- Font family and size.
+- Theme and icon theme.
+- Auto-save preferences.
+- Format-on-save behavior.
+- Default formatters.
+- File associations.
+- Tab size and indentation.
+- Word wrap.
+- Explorer preferences.
+- Search preferences.
+- Terminal appearance.
+- Git integration preferences.
+- Language-specific settings.
+
+Prefer shared User/Profile configuration over duplicating identical settings into nine descriptors.
+
+Retain intentional Workspace-specific exceptions.
+
+---
+
+# PART IV — AUTOMATIC TERMINAL INITIALIZATION
+
+## 16. Required Behavior
+
+Whenever any of the nine Workspaces opens in VS Code, I want two independent integrated terminal sessions to become available.
+
+### Terminal A — Python REPL
+
+Name:
+
+`Python REPL`
 
 Requirements:
 
-1. Preserve all 29 original project roots.
-2. Preserve all existing physical project paths.
-3. Preserve useful existing Workspace settings where applicable.
-4. Preserve project folder aliases wherever possible.
-5. Make all 29 projects accessible through VS Code Explorer.
-6. Enable global searching across all 29 project roots using VS Code Search.
-7. Support cross-project GitHub Copilot analysis.
-8. Do not duplicate project source directories.
-9. Do not retain an unnecessary duplicate `TOTAL.code-workspace` after successful migration.
+1. Use the existing CitiSoftware Python 3.14.4 interpreter after successful configuration.
+2. Launch an interactive Python terminal.
+3. Display the standard `>>>` prompt.
+4. Remain available for manual Python commands.
+5. Do not automatically execute project scripts.
+6. Do not install packages.
+7. Do not create virtual environments.
+8. Do not use Python 3.7 or 3.12 accidentally because of PATH precedence.
 
-The Master Workspace must be maintained permanently.
+Prefer an explicit verified Python 3.14.4 executable path when necessary for deterministic startup.
 
-It is not a temporary fallback.
+### Terminal B — PowerShell
 
-If relocating the original descriptor changes the meaning of relative paths, correctly recalculate those paths.
+Name:
 
-Do not rename or relocate source project directories.
+`PowerShell`
 
-The Master Workspace and specialized Workspaces must reference the same underlying physical project files.
+Requirements:
+
+1. Launch a separate interactive PowerShell terminal.
+2. Use my existing PowerShell installation and configuration.
+3. Remain open for manual commands.
+4. Do not execute project-specific initialization scripts.
+5. Do not change system environment variables or execution policy.
+
+## 17. Automatic Startup Configuration
+
+Use supported VS Code Workspace Tasks.
+
+Where appropriate, configure:
+
+```json
+"runOptions": {
+  "runOn": "folderOpen"
+}
+```
+
+Requirements:
+
+- Startup behavior must be available in all nine Workspaces.
+- Python REPL and PowerShell must occupy separate terminal sessions.
+- Do not overwrite or reuse the same terminal session for both.
+- Preserve the VS Code editor focus where practical.
+- Preserve existing terminal settings.
+- Preserve existing Workspace tasks.
+- Do not create files inside project source repositories.
+- Avoid duplicate startup terminals where feasible.
+- Account for VS Code terminal session restoration.
+- Do not run application scripts.
+- Do not launch Master synchronization automatically.
+
+If interactive PowerShell or Python requires a particular task configuration to remain open, use an appropriate supported shell-task implementation.
+
+Do not falsely report a running REPL if a task merely executed a command and exited.
+
+If automatic startup requires Workspace Trust or automatic-task approval, explain the user action required.
+
+Do not bypass security protections.
+
+## 18. Terminal Startup Verification
+
+Verify configuration separately from actual runtime behavior.
+
+Where practical, confirm:
+
+- Python REPL launches with Python 3.14.4.
+- Python displays `>>>`.
+- PowerShell launches separately.
+- Neither terminal immediately exits.
+- Existing manual terminals remain unaffected.
+- Reopening the Workspace does not produce unnecessary duplicate sessions.
+
+If actual UI startup cannot be observed, report it as configured but not yet visually verified.
 
 ---
 
-## 5. Automatic Master Workspace Synchronization
+# PART V — MASTER WORKSPACE SYNCHRONIZATION
 
-Create a Python script:
+## 19. Existing Synchronization Utility
+
+The following utility should already exist:
 
 `H:\Analytics\xChen\30-39 Projects\38 Workspaces\sync_master_workspace.py`
 
-### Purpose
+Preserve its existing implementation if it is functioning correctly.
 
-The eight specialized Workspaces are the **single source of truth for project membership**.
+The eight specialized Workspace descriptors are authoritative for project membership.
 
-The Master Workspace should automatically aggregate all project roots defined in those eight Workspaces.
+`38-Master` is the aggregate view.
 
-When I add, remove, or reassign a project in a specialized Workspace, I should not need to manually edit `38-Master.code-workspace`.
-
-### Functional Requirements
+## 20. Synchronization Requirements
 
 The script must:
 
-1. Locate the eight specialized `.code-workspace` files in the same directory as the script.
+1. Read the `folders` arrays from all eight specialized descriptors.
+2. Resolve referenced paths.
+3. Normalize Windows paths.
+4. Detect duplicate specialized Workspace assignments.
+5. Verify project directories exist.
+6. Aggregate all unique projects into `38-Master`.
+7. Preserve folder aliases where possible.
+8. Preserve Master settings, tasks, and extensions.
+9. Preserve Python REPL and PowerShell startup tasks.
+10. Preserve the manual synchronization task.
+11. Support new, removed, and reassigned projects.
+12. Avoid unnecessary file rewrites.
+13. Produce deterministic output.
+14. Prevent incomplete updates.
+15. Never modify source repositories or specialized Workspace membership automatically.
 
-2. Read the `folders` array from each specialized Workspace descriptor.
+Use Python standard library only.
 
-3. Resolve every folder reference to its actual physical directory.
+## 21. Synchronization Commands
 
-4. Normalize paths to identify duplicate references reliably on Windows.
-
-5. Collect all unique project roots.
-
-6. Detect if the same physical project root is assigned to more than one specialized Workspace.
-
-7. Report cross-Workspace duplicate assignments clearly instead of silently accepting them.
-
-8. Generate or update the `folders` array in `38-Master.code-workspace`.
-
-9. Preserve the existing Master Workspace's other configuration properties, including useful `settings`, `extensions`, and other workspace-level configuration.
-
-10. Preserve each project's folder alias wherever possible.
-
-11. Produce stable, deterministic ordering to avoid unnecessary file changes.
-
-12. Validate the existence of all referenced project directories before updating the Master.
-
-13. Support project additions, removals, and reassignment automatically.
-
-14. Never modify the eight specialized Workspace descriptors.
-
-15. Never modify any project source code, Git repositories, or physical project directories.
-
-16. Do not overwrite the Master Workspace if a validation error would result in an incomplete or invalid project mapping.
-
-17. Write updates safely using a temporary file and atomic replacement where possible.
-
-Use only the Python standard library.
-
-Use strict JSON for the resulting Workspace descriptors so the synchronization script can parse them without external dependencies.
-
-If the existing `TOTAL.code-workspace` uses VS Code JSONC syntax (comments or trailing commas), safely preserve its configuration values during conversion. Do not silently discard settings or overwrite a descriptor that cannot be safely parsed.
-
-### Command-Line Interface
-
-Implement two modes.
-
-**Sync Mode**
+Normal synchronization:
 
 ```powershell
 python "H:\Analytics\xChen\30-39 Projects\38 Workspaces\sync_master_workspace.py"
 ```
 
-This should synchronize the Master Workspace with the eight specialized Workspaces.
-
-**Check Mode**
+Read-only check:
 
 ```powershell
 python "H:\Analytics\xChen\30-39 Projects\38 Workspaces\sync_master_workspace.py" --check
 ```
 
-This should:
+Once Python 3.14.4 has been verified, the utility may be invoked with its verified executable path when needed.
 
-- Check whether the Master Workspace matches the specialized Workspaces.
-- Identify missing projects.
-- Identify outdated project references.
-- Identify duplicate assignments.
-- Report whether synchronization is needed.
-- Return a nonzero exit code when errors or synchronization differences exist.
-- Make no file changes.
+Do not change the script solely to require Python 3.14.4 unless there is a justified compatibility requirement.
 
-### Synchronization Output
+The `--check` command must not modify files.
 
-Display a concise summary such as:
+## 22. VS Code Sync Task
 
-```text
-Workspace Synchronization
--------------------------
-Specialized Workspaces: 8
-Total Project Roots: 29
-Unique Project Roots: 29
-Duplicate Assignments: 0
-Missing Directories: 0
-Master Workspace: 38-Master
-
-Status: IN SYNC
-```
-
-When new projects are added, report which project references were added to the Master Workspace.
-
----
-
-## 6. Convenient VS Code Synchronization
-
-In addition to the Python script, provide a convenient way to trigger synchronization from within VS Code.
-
-Preferred solution:
-
-Create a VS Code Workspace Task named:
+Preserve the existing task:
 
 `Sync Master Workspace`
 
-Configure it to invoke `sync_master_workspace.py`.
-
-Prefer storing this task in `38-Master.code-workspace` using workspace-level tasks configuration, rather than adding files inside source project repositories.
-
-The task should be accessible through:
+It should remain accessible from:
 
 `Terminal → Run Task → Sync Master Workspace`
 
-Do not introduce file watchers, background services, scheduled jobs, or unnecessary dependencies.
+This task must be manually triggered.
 
-It is sufficient that I can synchronize the Master using one VS Code task or one terminal command.
-
-The script must remain usable independently of VS Code.
+Do not automatically invoke it whenever a Workspace opens.
 
 ---
 
-## 7. Scope Restrictions
+# PART VI — IMPLEMENTATION SAFETY
 
-### Allowed Operations
+## 23. Allowed Operations
 
 You may:
 
-- Create the eight specialized `.code-workspace` files.
-- Rename and relocate the existing `TOTAL.code-workspace` descriptor to `38-Master.code-workspace`.
-- Create `sync_master_workspace.py`.
-- Add the Workspace synchronization task.
-- Inspect existing paths and Workspace configurations.
-- Validate Workspace JSON syntax.
-- Verify folder references and project counts.
-- Run the Workspace synchronization script to initialize the Master.
-- Run the synchronization script in check mode.
+- Inspect existing VS Code configuration.
+- Inspect Python interpreter settings and logs.
+- Verify installed Python executables.
+- Safely repair relevant settings when permitted.
+- Back up configuration files before changing them.
+- Correct stale interpreter references.
+- Apply supported Workspace-level interpreter settings.
+- Update existing `.code-workspace` descriptors.
+- Configure terminal startup tasks.
+- Preserve and verify Master synchronization.
+- Validate Workspace JSON and referenced paths.
+- Run minimal Python version and REPL checks.
+- Run synchronization and check commands.
+- Verify configuration consistency.
 
-### Prohibited Operations
+## 24. Prohibited Operations
 
 Do NOT:
 
 - Move source project directories.
-- Copy or duplicate project source files.
-- Rename existing source project directories.
-- Modify Python, SQL, IronPython, VBA, or other project source code.
-- Change Git branches, remotes, histories, or repository boundaries.
-- Merge or consolidate Git repositories.
-- Perform source code refactoring.
-- Consolidate shared libraries.
+- Copy or duplicate source projects.
+- Modify project business logic.
+- Refactor Python, SQL, VBA, or IronPython source code.
+- Merge or migrate Git repositories.
+- Modify Git branches or remotes.
+- Install or uninstall Python.
 - Install Python packages.
-- Configure Python environments or interpreters.
-- Run unit tests or integration tests.
-- Execute ASAP2 workflows.
+- Create virtual environments.
+- Modify CitiSoftware Python installation files.
+- Reset my VS Code Profile.
+- Reset keyboard shortcuts.
+- Reset Copilot settings.
+- Broadly change Windows permissions.
+- Bypass corporate security policies.
+- Change PowerShell execution policy.
+- Modify system PATH.
+- Perform application runtime tests.
+- Execute ASAP2 business workflows.
 - Test SQL Server or Oracle connections.
-- Resolve historical versions of PayRules or General Functions.
-- Perform unrelated architectural redesign.
-- Create new project repositories.
-- Modify credentials or sensitive configuration files.
+- Rebuild the already completed Workspace architecture unnecessarily.
 
-Do not require any project to execute successfully inside its new Workspace.
-
-This is a Workspace configuration task only.
+Do not change files inside original source project directories.
 
 ---
 
-## 8. Simplified Acceptance Criteria
+# PART VII — EXECUTION SEQUENCE
 
-The implementation is complete when all the following conditions are satisfied:
+## 25. Step 1 — Diagnose Python Failure
 
-1. Exactly nine `.code-workspace` descriptor files exist in the specified directory.
+Start by reproducing or inspecting the complete Python interpreter selection error.
 
-2. The eight specialized Workspace descriptors match the approved project grouping.
+Determine why VS Code cannot write the selected interpreter path.
 
-3. All 29 original project roots appear exactly once across the eight specialized Workspaces.
+Inspect the settings scope and write restrictions.
 
-4. `38-Master.code-workspace` references all 29 project roots.
+Identify the root cause before making changes.
 
-5. Every referenced physical directory exists.
+## 26. Step 2 — Fix Python 3.14.4
 
-6. All Workspace descriptor files contain valid configurations and correct paths.
+Verify the actual executable.
 
-7. The Master synchronization script can aggregate the specialized Workspace configurations.
+Apply the safest supported repair.
 
-8. Running the synchronization script repeatedly without membership changes does not unnecessarily rewrite the Master.
+Prefer preserving the existing Profile and settings.
 
-9. The `--check` command reports that the Master is synchronized.
+Use Workspace-level configuration if User Settings cannot be safely repaired.
 
-10. The VS Code synchronization task is available.
+Verify Python 3.14.4 can launch.
 
-11. All original source code, Git repositories, and project directories remain unchanged.
+Report any unresolved settings restrictions.
 
-12. The obsolete `TOTAL.code-workspace` descriptor has been replaced by `38-Master.code-workspace` without losing any project references.
+## 27. Step 3 — Inspect Existing Nine Workspaces
 
-Runtime validation is explicitly NOT required.
+Check the nine existing Workspace descriptors in the mandatory directory.
 
----
+Confirm their project membership and paths.
 
-## 9. Execution Strategy
+Do not regenerate correct files.
 
-Proceed in the following order:
+Verify that Master synchronization remains intact.
 
-**Step 1 — Inspect Existing Configuration**
+## 28. Step 4 — Preserve Environment Consistency
 
-Locate the original `TOTAL.code-workspace` descriptor and recover its actual project paths and folder aliases.
+Review Profile, keyboard shortcut, extension, Copilot, editor, Python, and terminal configuration.
 
-Use the project mapping established during the previous discovery.
+Ensure the nine Workspaces use the same general development environment.
 
-**Step 2 — Create Specialized Workspaces**
+Apply only necessary changes.
 
-Create the eight specialized descriptors in the mandatory directory.
+Do not duplicate shared settings unnecessarily.
 
-Ensure all 29 original project roots are accounted for.
+## 29. Step 5 — Configure Automatic Terminals
 
-**Step 3 — Create Master Workspace**
+Ensure all nine Workspaces define the appropriate startup behavior.
 
-Safely relocate and rename the original `TOTAL` descriptor as `38-Master.code-workspace`, preserving its useful settings and recalculating any affected paths.
+The Python REPL must target the verified Python 3.14.4 interpreter.
 
-If a target descriptor already exists, inspect it and do not overwrite it blindly.
+PowerShell must remain a separate interactive terminal.
 
-**Step 4 — Implement Synchronization**
+Preserve Master synchronization tasks.
 
-Create `sync_master_workspace.py` with synchronization and check modes.
+## 30. Step 6 — Verify Workspace Synchronization
 
-**Step 5 — Configure VS Code Task**
+Run the existing synchronization check.
 
-Add `Sync Master Workspace` as a convenient workspace-level task.
+If necessary, synchronize Master.
 
-**Step 6 — Perform Configuration Verification**
+Verify all 29 project roots remain correctly referenced.
 
-Run the synchronization utility.
+Verify repeated synchronization does not unnecessarily rewrite the Master.
 
-Verify project coverage, path validity, configuration syntax, and synchronization consistency.
+## 31. Step 7 — Final Report
 
-Do not run application code or runtime tests.
+Provide a concise report covering:
 
-**Step 7 — Report Results**
+### A. Python 3.14.4 Repair
 
-Provide a concise final report containing:
+- Root cause of interpreter selection failure.
+- Actual Python executable path.
+- Verified Python version.
+- Configuration changes made.
+- Whether VS Code interpreter selection now works.
+- Whether any User Settings write restriction remains.
 
-- Final Workspace directory tree.
-- Project count for each Workspace.
-- Total unique project count.
+### B. VS Code Environment
+
+- Active Profile.
+- Shared settings scope.
+- Keyboard shortcut consistency.
+- Extension consistency.
+- Copilot configuration preservation.
+
+### C. Workspace Status
+
+- Nine Workspace descriptors.
+- 29 unique project roots.
+- Missing directories.
+- Duplicate assignments.
 - Master synchronization status.
-- Files created or renamed.
-- Any unresolved configuration issues.
-- Instructions for adding a new project and synchronizing Master.
+
+### D. Terminal Startup
+
+- Python REPL configuration.
+- PowerShell configuration.
+- Whether actual startup was verified.
+- Any remaining Workspace Trust or automatic-task permissions.
+
+### E. Files Changed
+
+List the exact configuration files created or modified.
+
+Do not include unrelated source files.
+
+### F. Remaining Manual Actions
+
+Provide only the essential VS Code UI actions still required.
 
 ---
 
-## 10. Future Maintenance Rules
+# PART VIII — ACCEPTANCE CRITERIA
 
-Going forward, apply the following maintenance model:
+The task is complete when:
 
-1. When adding a new development project, assign it to the appropriate specialized Workspace.
-2. Run `Sync Master Workspace`.
-3. The synchronization utility automatically adds the new project to `38-Master`.
-4. When removing or reassigning a project, update its specialized Workspace membership and synchronize again.
-5. Do not manually manage project membership in the Master Workspace.
-6. Preserve existing project directories and independent Git repositories.
+1. The existing Python 3.14.4 executable is verified.
+2. Python 3.14.4 can be used through a supported VS Code configuration mechanism.
+3. The Python interpreter write failure is repaired or its remaining restriction is clearly identified with a working Workspace-level alternative.
+4. Existing Python environments are preserved.
+5. The nine existing Workspace descriptors remain intact.
+6. The eight specialized Workspaces collectively reference 29 unique projects.
+7. `38-Master` references all 29 projects.
+8. Master synchronization remains functional.
+9. All nine Workspaces consistently use the existing VS Code Profile where supported.
+10. Keyboard shortcuts, extensions, Copilot, and shared editor preferences remain intact.
+11. Each Workspace has Python REPL and PowerShell startup configuration.
+12. Python REPL uses Python 3.14.4.
+13. No project source code, physical project directories, or Git repositories are changed.
+14. Configuration changes and any unverified UI behavior are accurately reported.
 
-The eight specialized Workspace configurations are authoritative.
-
-`38-Master.code-workspace` is the generated aggregate view for global searching and cross-project analysis.
+Do not require unrelated runtime or business application tests.
 
 ---
 
-## 11. Final Instruction
+# FINAL INSTRUCTION
 
-The architecture and naming conventions have already been approved.
+**First fix the Python 3.14.4 interpreter selection problem in my existing VS Code environment.**
 
-**Proceed with implementation now.**
+After the Python repair, finalize the nine existing Workspaces without rebuilding completed work.
 
-Do not restart planning or introduce unnecessary approval blockers.
+Preserve my current VS Code Profile, keyboard shortcuts, extensions, GitHub Copilot settings, and editor preferences.
 
-Only stop and ask for clarification if an actual project path cannot be resolved unambiguously, an existing descriptor would be overwritten, or there is a concrete risk of losing existing Workspace configuration.
+Ensure all nine Workspaces provide the same general development experience, including automatic Python 3.14.4 REPL and PowerShell startup.
 
-Do not perform source code migration, refactoring, or runtime testing.
+Preserve the existing Master synchronization architecture.
 
-Complete the Workspace organization and provide the final implementation summary.
+Proceed with supported, low-risk configuration repairs and updates.
+
+Only stop for clarification when a change would risk losing existing settings, require bypassing enterprise restrictions, or overwrite an intentionally different interpreter configuration.
+
+Do not perform unrelated changes.
