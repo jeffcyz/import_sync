@@ -1,228 +1,141 @@
-# AALC2201 — Phase 1: Knowledge-Grounded Runtime Semantic Analysis
+这个问题可以一次性解决。你现在遇到的不是 `kb-validate` 本身的问题，而是 Python 没有找到 `asap_calc_replica` 这个 Package。
 
-The local ASAP Knowledge Base has been implemented successfully.
+你的项目采用 `src/` Layout：
 
-The existing system includes:
+```
+23.10+10 CheckerBuild/
+├── pyproject.toml
+├── src/
+│   └── asap_calc_replica/
+│       ├── __init__.py
+│       └── cli.py
+├── deals/
+├── knowledge/
+└── runs/
+```
 
-- 678 raw Markdown documents.
-- 2,389 semantic sections.
-- 2,995 structured symbols.
-- 1,434 release changes.
-- 302 SQL tables/views and 13,064 columns.
-- Exact symbol lookup and SQLite FTS5.
-- Source/section/line provenance.
-- Incremental indexing.
-- AALC-specific knowledge integration.
-- Existing A/B/C/D semantic readiness classification.
+Python 默认不会自动将 `src/` 加入模块搜索路径。
 
-The Knowledge Base infrastructure is now established.
+我建议采用：Project Virtual Environment + Editable Installation + VS Code Interpreter 固定配置。
 
-**Do not rebuild, duplicate, or reorganize the Knowledge Base unless a specific defect is discovered.**
+这样不需要每次设置 `PYTHONPATH`，也不会影响其他 Python Projects。
 
-## Primary Objective
+## 一、在 VS Code Terminal 一次性执行
 
-Advance the project to **Phase 1: AALC2201 Runtime Semantic Analysis and Calculation Dependency Discovery**.
+确认 Terminal 当前位于 `CheckerBuild` 根目录，然后复制执行：
 
-The objective is to understand how the original ASAP calculations work before attempting to reproduce them in native Excel.
+```
+# 1. Verify project structure
+if (!(Test-Path ".\pyproject.toml") -or
+    !(Test-Path ".\src\asap_calc_replica\__init__.py")) {
+    throw "Project root or Python package not found."
+}
 
-ASAP scripts depend on host-provided IronPython objects, runtime state, execution lifecycle, and external data.
+# 2. Create project-specific Python environment
+if (!(Test-Path ".\.venv\Scripts\python.exe")) {
+    python -m venv .venv
+}
 
-Do not assume that executing the original scripts in standalone Python will reproduce ASAP behavior.
+# 3. Install the package into the environment
+& ".\.venv\Scripts\python.exe" -m pip install --upgrade pip
+& ".\.venv\Scripts\python.exe" -m pip install -e .
 
-Do not build a complete ASAP runtime emulator.
+# 4. Verify Python can import the package
+& ".\.venv\Scripts\python.exe" -c "import asap_calc_replica; print(asap_calc_replica.__file__)"
+```
 
-## 1. Knowledge Base Quality Gate
+如果成功，第 4 步应该打印类似：
 
-Review the existing ingestion and coverage reports.
+```
+H:\Analytics\xChen\...\CheckerBuild\
+src\asap_calc_replica\__init__.py
+```
 
-Investigate:
+如果 `pip install -e .` 报依赖安装错误，应先修复对应依赖，不要继续执行后面的步骤。
 
-- The 59 incomplete Markdown documents.
-- Any missing or truncated Function Signatures.
-- Potentially lost code examples.
-- The 2 unresolved AALC2201 candidate symbols.
-- Accuracy of the existing source references.
+## 二、让 VS Code 永久使用这个环境
 
-Prioritize documentation actually referenced by AALC2201.
+在 VS Code 按下 `Ctrl + Shift + P`，选择：
 
-Do not repeat the full ingestion pipeline without evidence of a problem.
+Python: Select Interpreter → `.venv\Scripts\python.exe`
 
-Distinguish source incompleteness from extraction errors and harmless Markdown formatting differences.
+也可以在当前 Workspace 的 `.vscode/settings.json` 中设置：
 
-## 2. Analyze Actual AALC2201 Scripts
+```
+{
+    "python.defaultInterpreterPath": "${workspaceFolder}\\.venv\\Scripts\\python.exe",
+    "python.terminal.activateEnvironment": true
+}
+```
 
-Read all available authorized scripts under:
+如果已有 `settings.json`，只添加这两项，不要覆盖其他设置。
 
-`deals/AALC2201/asap_scripts/`
+然后关闭旧 Terminal，新建一个 Terminal，运行：
 
-Preserve the original scripts unchanged.
+```
+python -c "import sys; print(sys.executable)"
+```
 
-Build a complete static inventory of:
+应该指向 `CheckerBuild\.venv\Scripts\python.exe`。
 
-- Functions and classes.
-- ASAP host-provided objects.
-- Method calls and property access.
-- Inputs and outputs.
-- Field assignments.
-- Mutations and side effects.
-- Conditional branches.
-- Loops and execution order.
-- Collection operations.
-- Date and period logic.
-- Historical state dependencies.
-- Index and rate lookup operations.
-- External and SQL data dependencies.
+之后就可以正常使用：
 
-Do not rely only on lexical keyword matching.
+```
+python -m asap_calc_replica.cli kb-validate
+```
 
-Support the syntax actually present in the scripts. Where parsing is incomplete, retain exact source locations and report the limitation.
+前提是你本地的 `cli.py` 已实现 `kb-validate` 子命令。如果后续出现 `invalid choice: kb-validate`，那是 CLI 功能问题，而不再是模块导入问题。
 
-## 3. Resolve ASAP Runtime Semantics
+## 三、让 Copilot 彻底修复并验证
 
-For every ASAP-specific symbol:
+如果你希望直接交给现有 GPT-5.6 Copilot Agent，我建议使用下面的 Prompt：
 
-1. Perform exact Knowledge Base lookup.
-2. Retrieve the corresponding Scripting Manual definition.
-3. Check applicable Release Changes.
-4. Retrieve relevant User Manual behavior when necessary.
-5. Check SQL Server metadata where relevant.
-6. Identify required runtime inputs.
-7. Establish documented output and side-effect behavior.
-8. Identify remaining unknowns.
+```
 
-Every runtime contract must include source references.
+Fix the Python package import and execution environment
+permanently for this VS Code workspace.
 
-Do not infer method behavior solely from naming conventions.
+Current error:
+ModuleNotFoundError: No module named 'asap_calc_replica'
 
-If documentation is insufficient, report UNKNOWN.
-
-## 4. Build Calculation Dependency Graph
-
-For every calculated output field, build a dependency chain:
-
-Output Field
-→ ASAP Source Expression
-→ Intermediate Calculations
-→ Runtime Operations
-→ Required Input Fields
-→ Historical / Period Dependencies
-→ SQL / CSV Mappings
-→ Knowledge Evidence
-
-Preserve:
-
-- Execution order.
-- Intermediate field mutations.
-- Transaction processing sequence.
-- Conditional logic.
-- Portfolio calculation dependencies.
-- Historical carryforward.
-- Runtime initialization requirements.
-
-Detect and report unresolved dependencies and potential cycles.
-
-Do not silently simplify sequential or stateful calculations into independent formulas.
-
-## 5. Input Sufficiency Assessment
-
-Compare the required input fields and runtime values against the available AALC2201 run inputs.
-
-Identify missing:
-
-- Setup fields.
-- Periodic fields.
-- Transaction data.
-- Payment inputs.
-- Critical dates.
-- Index values.
-- Prior-period values.
-- Runtime-computed intermediate states.
-
-Distinguish actual missing inputs from fields whose semantics are still unknown.
-
-Do not use independently exported ASAP SQL benchmark outputs as substitute inputs.
-
-## 6. Calculation Readiness
-
-Classify every identified calculated output field using the existing project model:
-
-A — Semantics and Excel translation understood; inputs available.
-
-B — As above, requiring a documented runtime mapping.
-
-C — Semantics understood, but required data missing.
-
-D — Unresolved runtime semantics or uncertain Excel equivalence.
-
-Apply D > C > B > A.
-
-Do not automatically classify a field as A or B merely because a matching ASAP API was found in the Knowledge Base.
-
-For every classification, provide the supporting evidence and remaining gaps.
-
-## 7. Deliverables
-
-Generate private, local-only reports:
-
-- `runtime_dependency_inventory.csv`
-- `runtime_contracts.json`
-- `field_lineage.csv`
-- `calculation_dependency_graph.json`
-- `required_inputs.json`
-- `missing_inputs.csv`
-- `semantic_gaps.md`
-- `calculation_coverage.csv`
-- `phase1_assessment.md`
-
-Store real deal-specific reports under the existing ignored directory:
-
-`runs/AALC2201/2026-10/reports/`
-
-Do not commit confidential source-derived reports to Git.
-
-Use synthetic fixtures for automated tests.
-
-## 8. Verification
-
-Verify:
-
-- Coverage of all available source files.
-- Coverage of calculated output assignments.
-- Preservation of source line references.
-- Accurate linking to Knowledge Base sources.
-- Explicit handling of unresolved runtime semantics.
-- Correct separation of semantic, data, and Excel translation gaps.
-
-Run relevant existing tests.
-
-Do not claim runtime validation unless actual tests have been executed in an authorized ASAP environment.
-
-## 9. Execution Boundaries
-
-Do not:
-
-- Modify original ASAP scripts.
-- Rebuild the entire Knowledge Base.
-- Generate Excel formulas.
-- Create output workbooks.
-- Execute production SQL queries.
-- Invent missing API semantics.
-- Commit or push confidential artifacts.
-- Proceed to Phase 2 automatically.
-
-Complete Phase 1 only.
-
-If the actual AALC2201 source scripts or required local inputs are unavailable, identify the missing files and stop rather than fabricating an analysis.
-
-At completion, report:
-
-1. Number of source files analyzed.
-2. Number of calculated output fields discovered.
-3. Number of resolved and unresolved runtime symbols.
-4. Number of semantic, data, and translation gaps.
-5. A/B/C/D field distribution.
-6. Main calculation dependencies.
-7. Evidence quality and knowledge coverage.
-8. Readiness for Excel Formula Generation.
-
-Respond in Chinese, retaining technical English terms.
+PROJECT:
+The repository uses a src-layout Python package with
+pyproject.toml and src/asap_calc_replica/.
+
+REQUIREMENTS:
+
+1. Inspect the actual repository root and pyproject.toml.
+2. Verify src/asap_calc_replica/__init__.py exists.
+3. Diagnose the current Python interpreter and sys.path.
+4. Set up or repair the project-specific .venv.
+5. Install the project using editable installation:
+   python -m pip install -e .
+6. Configure VS Code to consistently use this .venv.
+7. Ensure new integrated terminals use the same interpreter.
+8. Do not rely on temporary PYTHONPATH modifications.
+9. Preserve all existing workspace settings and extensions.
+10. Verify import resolution from the actual interpreter.
+11. Verify the kb-validate CLI command is implemented.
+12. Run kb-validate and capture its exit status.
+
+If Python 3.14.4 causes dependency compatibility issues,
+identify the exact incompatible dependency before proposing
+any Python version change.
+
+Do not modify ASAP calculation logic or KB semantics.
+
+Make the minimum necessary persistent configuration changes,
+then explain what was fixed and demonstrate successful execution.
+
+```
+
+我推荐你优先让 Copilot 执行这段 Prompt。 它能检查你的真实 Python 环境，避免我们凭截图猜测。
+
+另外，由于你的项目位于 `H:` 盘，假如这是公司 Network Drive，虚拟环境可能受到网络延迟或权限限制。如果确实遇到这种情况，可以把 `.venv` 建在公司允许的本地开发位置，Repository 仍然留在 `CheckerBuild`。
+
+最终需要达到的是：
+
+- 不再手动设置 `PYTHONPATH`。
+- 不再反复出现 `No module named asap_calc_replica`。
+- VS Code、Copilot 和 Terminal 使用同一个 Python Interpreter。
+- `pip install -e .` 只需在环境初次建立时执行；后续修改 `src/` 下的 Python 代码，不需要重新安装 Package。
