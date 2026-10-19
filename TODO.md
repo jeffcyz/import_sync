@@ -1,82 +1,185 @@
 
-You are taking over an existing Python engineering project
-previously developed using a VS Code coding agent.
+from pathlib import Path
+from datetime import datetime
+import win32com.client as win32
 
-PROJECT:
-ASAP Calculation Replica
+# ============================================================
+# Output location
+# ============================================================
 
-IMPORTANT:
-This is NOT a new project. Significant analysis and
-implementation work has already been completed.
+downloads = Path.home() / "Downloads"
+downloads.mkdir(parents=True, exist_ok=True)
 
-The previous agent is temporarily unavailable.
-You are now acting as a conversational engineering
-assistant without direct access to my local filesystem.
+output_file = downloads / (
+    f"ASAP_Excel_Format_Test_{datetime.now():%Y%m%d_%H%M%S}.xlsx"
+)
 
-I will progressively provide project documentation,
-source code, diagnostic reports, and relevant input data.
+# ============================================================
+# Launch a separate Microsoft Excel instance
+# ============================================================
 
-YOUR FIRST TASK:
-Understand the current project state before proposing
-any implementation changes.
+excel = win32.DispatchEx("Excel.Application")
+excel.Visible = False
+excel.DisplayAlerts = False
 
-Read all attached files carefully.
+workbook = None
 
-Project objective:
+try:
+    # Use the locally installed Excel's New Workbook defaults
+    workbook = excel.Workbooks.Add()
+    sheet = workbook.Worksheets(1)
+    sheet.Name = "FormatTest"
 
-Reconstruct all ASAP script-written AssetPeriodic fields
-using native Microsoft Excel formulas, while preserving
-the original ASAP calculation sequence, intermediate
-states, transaction aggregation, portfolio waterfall,
-and previous-period dependencies.
+    # Record the default column width
+    default_width = sheet.StandardWidth
 
-October 2026 is the current period.
-September 2026 is the previous period.
+    # ========================================================
+    # Get BUILT-IN Excel formats
+    # ========================================================
 
-Both source AssetPeriodic datasets contain post-ASAP
-calculation values.
+    # These are taken directly from local Excel cell styles.
+    # Only apply NumberFormat, not the entire cell style.
 
-October script-written final values must NOT be used
-as inputs to reconstructed Excel formulas.
+    comma_format = workbook.Styles("Comma").NumberFormat
+    short_date_format = workbook.Styles("Short Date").NumberFormat
 
-September historical values can be used where the
-script explicitly requires previous-period state.
+    print("Built-in Comma Style:", comma_format)
+    print("Built-in Short Date:", short_date_format)
 
-Reconstructed Excel values will eventually be compared
-against October ASAP output.
+    # ========================================================
+    # Headers - no special formatting
+    # ========================================================
 
-TECHNICAL CONSTRAINTS:
+    headers = [
+        "AssetName",
+        "PaymentDate",
+        "Principal",
+        "Interest",
+        "Total",
+        "Rate",
+        "Days",
+        "Accrual",
+        "INDEX_MATCH",
+        "Difference",
+    ]
 
-- Python src-layout package
-- Microsoft Excel COM on Windows
-- INDEX/MATCH instead of XLOOKUP/VLOOKUP
-- Native Excel formulas, not Python-precomputed outputs
-- Local Excel New Workbook default appearance
-- No column width modifications
-- Short Date for dates
-- Built-in Comma Style for monetary amounts
-- General format for everything else
-- Comparison: Excel, ASAP SQL, Difference
+    for col, header in enumerate(headers, start=1):
+        sheet.Cells(1, col).Value = header
 
-ASAP scripts are not independently executable outside
-their host runtime. Do not assume undocumented semantics.
+    # ========================================================
+    # Sample Data
+    # ========================================================
 
-REQUIRED RESPONSE:
+    sample_data = [
+        (
+            "AALC2201-001",
+            datetime(2026, 10, 15),
+            1234567.89,
+            1250.50,
+            0.065,
+            30,
+        ),
+        (
+            "AALC2201-002",
+            datetime(2026, 10, 16),
+            2500000.00,
+            2150.75,
+            0.0725,
+            31,
+        ),
+        (
+            "AALC2201-003",
+            datetime(2026, 10, 17),
+            875432.10,
+            950.25,
+            0.0575,
+            29,
+        ),
+    ]
 
-1. Summarize the actual project architecture.
-2. Identify which development phases are complete.
-3. Identify existing implementations that can be reused.
-4. Identify the current blockers.
-5. Distinguish completed code from proposed code.
-6. Recommend the single most valuable next task.
-7. Identify exactly which additional files you need
-   for that task.
+    for row, data in enumerate(sample_data, start=2):
 
-Do not invent source code or runtime behavior.
+        name, payment_date, principal, interest, rate, days = data
 
-Do not claim to have inspected files that I have not
-provided.
+        # Raw values
+        sheet.Cells(row, 1).Value = name
+        sheet.Cells(row, 2).Value = payment_date
+        sheet.Cells(row, 3).Value = principal
+        sheet.Cells(row, 4).Value = interest
+        sheet.Cells(row, 6).Value = rate
+        sheet.Cells(row, 7).Value = days
 
-Do not write implementation code yet.
+        # Formula: Total
+        sheet.Cells(row, 5).Formula = f"=C{row}+D{row}"
 
-Wait for the next batch of files.
+        # Formula: Accrual using Actual/360
+        sheet.Cells(row, 8).Formula = (
+            f"=C{row}*F{row}*G{row}/360"
+        )
+
+        # Formula: INDEX + MATCH (exact match)
+        sheet.Cells(row, 9).Formula = (
+            f"=INDEX($E$2:$E$4,"
+            f"MATCH(A{row},$A$2:$A$4,0))"
+        )
+
+        # Formula: Difference
+        sheet.Cells(row, 10).Formula = f"=I{row}-E{row}"
+
+    # ========================================================
+    # Apply ONLY the requested number formats
+    # ========================================================
+
+    # Date -> Built-in Short Date
+    sheet.Range("B2:B4").NumberFormat = short_date_format
+
+    # Monetary fields -> Built-in Comma Style
+    for address in ("C2:E4", "H2:J4"):
+        sheet.Range(address).NumberFormat = comma_format
+
+    # Everything else remains General.
+    # No styles, font changes, colors, column widths,
+    # borders, alignment or AutoFit are applied.
+
+    # ========================================================
+    # Recalculate and save
+    # ========================================================
+
+    excel.CalculateFullRebuild()
+
+    workbook.SaveAs(
+        str(output_file),
+        FileFormat=51,  # .xlsx
+    )
+
+    # ========================================================
+    # Verification
+    # ========================================================
+
+    print("\n--- FORMAT VERIFICATION ---")
+
+    print("Default column width:", default_width)
+    print("Current column A width:", sheet.Columns("A").ColumnWidth)
+
+    print("Date format:", sheet.Range("B2").NumberFormat)
+    print("Money format:", sheet.Range("C2").NumberFormat)
+    print("Rate format:", sheet.Range("F2").NumberFormat)
+    print("Days format:", sheet.Range("G2").NumberFormat)
+
+    print("\n--- FORMULA VERIFICATION ---")
+
+    for cell in ("E2", "H2", "I2", "J2"):
+        print(
+            cell,
+            "Formula:", sheet.Range(cell).Formula,
+            "Value:", sheet.Range(cell).Value,
+        )
+
+    print("\nWorkbook successfully created:")
+    print(output_file)
+
+finally:
+    if workbook is not None:
+        workbook.Close(SaveChanges=False)
+
+    excel.Quit()
