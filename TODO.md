@@ -10,3 +10,10 @@
 │   │   ├── structured/              ← 后续提取
 │   │   ├── indexes/                 ← 本地搜索索引
 │   │   └── source_registry.json
+│   │
+│   └── aalc/
+│       ├── runtime_contracts/
+│       ├── calculation_semantics/
+│       ├── field_lineage/
+│       ├── dependencies/
+│       └── sql_mappings/
