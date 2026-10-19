@@ -1,151 +1,189 @@
 
-Continue the AALC2201 ASAP Calculation Replica project.
+IMPORTANT CORRECTION TO THE PHASE 1 REFINEMENT:
 
-IMPORTANT CLARIFICATION OF THE CALCULATION OBJECTIVE
+The actual October and September datasets HAVE ALREADY
+BEEN PROVIDED as Excel workbooks.
 
-I will provide two periods of AssetPeriodic data:
+They are located at:
 
-- October 2026 = current period
-- September 2026 = period - 1
+runs/AALC2201/2026-10/inputs/original/
 
-Both AssetPeriodic datasets contain POST-ASAP-calculation values.
+I can see four Excel files in this directory:
 
-The September completed values may be used as historical
-inputs where the original script explicitly references
-period - 1 or an equivalent verified historical state.
+1. Assets - AALC2201.xlsx
+2. Asset Periodics - 2026-09-15...xlsx
+3. Asset Periodics - 2026-10-15...xlsx
+4. Asset Periodic Transaction - 20...xlsx
 
-However, October script-generated field values must
-NEVER be reused as calculation inputs for reconstructing
-those same October fields.
+Use filesystem discovery to identify their exact names.
 
-Our goal is to independently reconstruct EVERY field
-written by the original ASAP periodic calculation script
-using an Excel-native formula dependency chain.
+The previous Phase 1 report incorrectly characterized
+these datasets as not yet provided.
 
-October post-run values are available for benchmarking,
-not for seeding the October calculation chain.
+They are PRESENT but have NOT BEEN INGESTED.
 
-TASK: REFINE PHASE 1 BEFORE EXCEL IMPLEMENTATION
+CURRENT TASK:
+Phase 1.5B — Actual Excel Source Discovery and
+Data Dependency Resolution.
 
-1. Identify the complete write-set of the original
-   AALC2201 periodic calculation script.
+Do not regenerate the existing static dependency graph
+unless actual workbook schemas reveal a necessary change.
 
-2. Identify all source fields read by the script,
-   including implicit runtime dependencies.
+STEP 1 — VERIFY LOCAL FILES
 
-3. For every October AssetPeriodic field, distinguish:
+- Confirm the actual workspace/repository root.
+- Enumerate all Excel workbooks in inputs/original/.
+- Report exact filenames, sizes, worksheet names,
+  dimensions, headers and data types.
+- Do not rely only on Git-tracked file discovery.
+- Do not require manually converted CSV files.
 
-   A. Script-written calculated output
+STEP 2 — IDENTIFY SOURCE TABLE ROLES
 
-   B. External/source input not written by this script
+Determine which workbook/worksheet corresponds to:
 
-   C. Historical state explicitly read from period - 1
+- AssetSetup
+- September AssetPeriodic (period - 1)
+- October AssetPeriodic (current period)
+- AssetPeriodicTransaction
+- AssetPeriodicLegacy, if applicable
 
-   D. Pre-script or intermediate state whose origin
-      is not yet confirmed
+Do not assume that each workbook contains only
+one worksheet.
 
-4. Treat the complete October post-run AssetPeriodic
-   table as a mixed dataset containing both legitimate
-   source inputs and final calculated outputs.
+Use actual worksheet schemas and field names,
+not filenames alone, to confirm table mapping.
 
-5. Do not allow October script-written final values
-   to feed any Excel reconstructed calculation.
+STEP 3 — VALIDATE PERIOD MAPPING
 
-6. For every October script-written field, build a
-   formula lineage tracing back exclusively to:
-   - Legitimate current-period source inputs
-   - Verified runtime inputs
-   - Current-period reconstructed Excel intermediates
-   - Legitimate September historical values
-   - Explicit constants or parameters in the script
+Identify the current ASAP period number and the
+previous period number.
 
-7. Preserve the exact sequence of assignments.
+The September and October dates in filenames
+are candidate payment dates, not proof of the
+ASAP period index.
 
-   An individual output field may be initialized,
-   incremented, modified, overwritten or conditionally
-   assigned multiple times.
+Verify the mapping against available runtime inputs
+and document any missing period information.
 
-   Model each necessary intermediate state explicitly.
+STEP 4 — VALIDATE SOURCE KEYS
 
-8. Detect READ-BEFORE-WRITE dependencies.
+Inspect actual data to determine:
 
-   If a field is read before being initialized in
-   the visible script, identify its actual pre-script
-   value source.
+- AssetId
+- DealId
+- AssetName
+- PaymentDate
+- Transaction identifiers
+- Relevant composite keys
 
-   Never use its October post-run final value
-   as an initialization shortcut.
+Verify uniqueness and referential relationships.
 
-   Never assume zero initialization without evidence.
+Do not assume AssetName is unique.
 
-9. Preserve:
-   - Transaction aggregation
-   - Transaction ordering when relevant
-   - Asset collection membership
-   - Portfolio aggregation
-   - Waterfall stages
-   - Sequential mutations
-   - Conditional branches
-   - Exceptions
-   - Prior-period carryforward
-   - Historical rewrite behavior
+STEP 5 — CONNECT DATA TO THE EXISTING DEPENDENCY GRAPH
 
-10. Build a stage-aware dependency graph.
+Read:
+- script_write_set.csv
+- source_input_classification.csv
+- read_before_write_report.csv
+- ordered_calculation_stages.json
+- calculation_dependency_graph.json
+- required_inputs.json
+- missing_inputs.csv
 
-    For each assignment, identify the version of
-    every upstream field actually being read.
+For each dependency, determine whether its data
+actually exists in the provided Excel workbooks.
 
-    Do not collapse multiple sequential writes into
-    a single field-level dependency if doing so
-    changes execution semantics.
+Resolve previously reported data gaps using
+actual worksheet columns.
 
-11. Separate the three types of October values:
-    - Original post-run source snapshot
-    - Independently reconstructed Excel values
-    - ASAP SQL benchmark values
+Do not classify a field as missing merely because
+it is not present as a CSV file.
 
-12. Add a strict calculation-isolation validation:
+STEP 6 — ENFORCE CALCULATION ISOLATION
 
-    Changing October benchmark values must not
-    change any reconstructed Excel calculation.
+The October AssetPeriodic values are post-ASAP-run.
 
-    Changing October post-run values of
-    script-written fields must not change any
-    reconstructed Excel calculation.
+For the 56 script-written fields:
 
-    Changing legitimate source inputs should
-    propagate through the dependent Excel formulas.
+- October final values are benchmarks only.
+- Never use October final script-written values
+  as inputs to reconstructed formulas.
+- October non-script-written fields can be inputs
+  when semantically valid.
+- September completed values are permitted only
+  for verified historical dependencies.
 
-    Changing September historical values should
-    affect only the appropriate downstream
-    carryforward calculations.
+Detect and block output leakage.
 
-13. Update the field readiness analysis based on
-    actual calculation prerequisites.
+For read-before-write fields, confirm whether the
+necessary pre-script state exists separately.
 
-14. Identify the smallest complete dependency chain
-    suitable for the first Excel prototype.
+Do not use October final values to fill missing
+pre-script state.
 
-15. Produce:
-    - script_write_set.csv
-    - source_input_classification.csv
-    - read_before_write_report.csv
-    - ordered_calculation_stages.json
-    - calculation_isolation_rules.md
-    - updated_field_readiness.csv
+STEP 7 — IMPLEMENT A REUSABLE EXCEL SOURCE LOADER
 
-16. Save deal-specific reports under the local,
-    Git-ignored run reports directory.
+If the repository does not already support original
+Excel workbook ingestion, implement the minimum
+necessary read-only ingestion functionality.
 
-17. Update the implementation plan and progress
-    documentation.
+Requirements:
 
-Do not execute ASAP.
-Do not generate the full Excel workbook yet.
-Do not alter the original ASAP script.
-Do not assume missing runtime semantics.
+- Support multiple XLSX workbooks.
+- Support multiple worksheets per workbook.
+- Use openpyxl or an appropriate Excel reader.
+- Preserve original files without modification.
+- Retain numeric precision, blank cells, dates,
+  identifiers and source column names.
+- Identify duplicate or missing keys.
+- Do not convert to CSV unless required.
+- Do not generate final Excel calculation formulas yet.
 
-Stop after the updated dependency and input/output
-isolation analysis.
+Design the loader so other AALC deals can reuse it.
 
-Present the remaining blockers before Phase 2.
+STEP 8 — REFRESH ACTUAL DATA READINESS
+
+Produce:
+
+- workbook_inventory.csv
+- worksheet_schema_inventory.csv
+- source_table_mapping.json
+- period_mapping_report.md
+- asset_key_validation.csv
+- input_dependency_coverage.csv
+- revised_missing_inputs.csv
+- updated_field_readiness.csv
+
+Distinguish:
+
+PRESENT_AND_VALIDATED
+PRESENT_BUT_MAPPING_UNRESOLVED
+ABSENT
+NOT_APPLICABLE
+
+STEP 9 — REPORT REMAINING BLOCKERS
+
+After reading the actual Excel files, identify
+which dependencies are still missing.
+
+Specifically check:
+
+- payment_inputs
+- ASAP period number
+- deal.critical_dates
+- index observations
+- pre-script initialization values
+- runtime collection semantics
+- transaction ordering
+
+Do not assume these are present unless verified.
+
+Run the appropriate automated tests.
+
+Do not modify original Excel workbooks.
+Do not modify original ASAP scripts.
+Do not generate the final Excel workbook yet.
+
+Stop after producing the revised data readiness report.
