@@ -1,7 +1,9 @@
 
+import argparse
 import ctypes
-from pathlib import Path
+import time
 from datetime import datetime
+from pathlib import Path
 
 import win32com.client as win32
 
@@ -10,42 +12,39 @@ import win32com.client as win32
 # 1. CONFIGURATION
 # ============================================================
 
-DOWNLOADS = Path.home() / "Downloads"
-DOWNLOADS.mkdir(parents=True, exist_ok=True)
+# Citi labels — transcribed from the supplied VBA screenshot.
+CITI_LABELS = {
+    "Public": "d291669d-c62a-41f9-9790-e463798003d8",
+    "Internal": "dd181445-6ec4-4473-9810-00785f082df0",
+    "Internal PII": "d4763801-a845-4ca5-827b-408ff682eaab",
+    "Confidential": "0133068c-5f3b-4062-adca-9b17e9c90306",
+    "Confidential PII": "ef691c43-652c-4966-abd9-c2d7e9f82ab4",
+    "Sensitive PII": "011939e9-cdc1-48bb-82e6-5abf0874d347",
+    "Restricted": "e4757149-730e-4418-8a27-ea34a98d08dc",
+}
 
-OUTPUT_FILE = DOWNLOADS / (
-    f"ASAP_Excel_Format_Test_"
-    f"{datetime.now():%Y%m%d_%H%M%S}.xlsb"
-)
+# Automatically use Internal for new synthetic test workbooks.
+DEFAULT_LABEL = "Internal"
+DEFAULT_LABEL_ID = CITI_LABELS[DEFAULT_LABEL]
 
-# Excel Binary Workbook
+# Excel Binary Workbook (*.xlsb)
 XL_EXCEL12 = 50
+
+DOWNLOADS = Path.home() / "Downloads"
 
 
 # ============================================================
-# 2. WINDOWS LOCAL SHORT DATE FORMAT
+# 2. WINDOWS SHORT DATE FORMAT
 # ============================================================
 
 def get_short_date_format():
-    """
-    Read the Windows regional Short Date pattern.
-
-    Examples:
-        M/d/yyyy
-        dd/MM/yyyy
-        yyyy-MM-dd
-
-    Translate Windows month tokens for Excel NumberFormat.
-    """
-
-    LOCALE_USER_DEFAULT = 0x0400
-    LOCALE_SSHORTDATE = 0x001F
+    """Read Windows regional Short Date settings."""
 
     buffer = ctypes.create_unicode_buffer(128)
 
     result = ctypes.windll.kernel32.GetLocaleInfoW(
-        LOCALE_USER_DEFAULT,
-        LOCALE_SSHORTDATE,
+        0x0400,  # LOCALE_USER_DEFAULT
+        0x001F,  # LOCALE_SSHORTDATE
         buffer,
         len(buffer),
     )
@@ -53,60 +52,126 @@ def get_short_date_format():
     if result == 0:
         raise ctypes.WinError()
 
-    # Windows uses M for month; Excel uses m.
+    # Common Windows month notation -> Excel notation.
     return buffer.value.replace("M", "m")
 
 
 # ============================================================
-# 3. LAUNCH EXCEL
+# 3. SENSITIVITY LABEL HELPERS
 # ============================================================
 
-excel = win32.DispatchEx("Excel.Application")
-excel.Visible = False
-excel.DisplayAlerts = False
+def get_workbook_label(wb):
+    """Read an existing Excel sensitivity label."""
 
-workbook = None
+    info = wb.SensitivityLabel.GetLabel()
 
-try:
+    if info is None:
+        return None
 
-    # Create a workbook using local Excel defaults
-    workbook = excel.Workbooks.Add()
+    label_id = str(info.LabelId or "").strip()
 
-    # Ensure that at least 3 sheets exist
-    while workbook.Worksheets.Count < 3:
-        workbook.Worksheets.Add(
-            After=workbook.Worksheets(
-                workbook.Worksheets.Count
-            )
+    if not label_id:
+        return None
+
+    return {
+        "id": label_id,
+        "name": str(info.LabelName or ""),
+    }
+
+
+def apply_internal_label(wb):
+    """
+    Apply Internal automatically to an unlabeled workbook.
+
+    Preserve any different existing label.
+    Never overwrite or downgrade an existing classification.
+    """
+
+    existing = get_workbook_label(wb)
+
+    if existing:
+        if existing["id"].lower() == DEFAULT_LABEL_ID.lower():
+            print("Internal label already present.")
+            return
+
+        raise RuntimeError(
+            "Workbook already has a different sensitivity label: "
+            f"{existing['name']}. Automatic relabeling is blocked."
         )
 
-    source = workbook.Worksheets(1)
-    calc = workbook.Worksheets(2)
-    comparison = workbook.Worksheets(3)
+    print("Applying Internal Sensitivity Label...")
+
+    sensitivity = wb.SensitivityLabel
+
+    info = sensitivity.CreateLabelInfo()
+
+    # Mirrors the supplied VBA implementation.
+    info.AssignmentMethod = 1
+    info.Justification = ""
+    info.IsEnabled = True
+    info.LabelId = DEFAULT_LABEL_ID
+    info.LabelName = DEFAULT_LABEL
+    info.SiteId = ""
+    info.SetDate = datetime.now()
+
+    context = win32.Dispatch("Scripting.Dictionary")
+
+    sensitivity.SetLabel(info, context)
+
+    # Allow a short time for Office to update its label state.
+    for _ in range(15):
+        applied = get_workbook_label(wb)
+
+        if (
+            applied
+            and applied["id"].lower() == DEFAULT_LABEL_ID.lower()
+        ):
+            print("Internal label confirmed.")
+            return
+
+        time.sleep(0.2)
+
+    raise RuntimeError(
+        "Excel did not confirm the Internal sensitivity label. "
+        "Check the tenant label ID, SiteId requirements, "
+        "and corporate labeling policy."
+    )
+
+
+# ============================================================
+# 4. GENERATE TEST WORKBOOK
+# ============================================================
+
+def populate_workbook(wb):
+
+    while wb.Worksheets.Count < 3:
+        wb.Worksheets.Add(
+            After=wb.Worksheets(wb.Worksheets.Count)
+        )
+
+    source = wb.Worksheets(1)
+    calc = wb.Worksheets(2)
+    comparison = wb.Worksheets(3)
 
     source.Name = "Source"
     calc.Name = "Calculation"
     comparison.Name = "Comparison"
 
-    # Save original column width for verification
-    default_width = source.Columns("A").ColumnWidth
+    # Capture default widths for verification.
+    original_widths = {
+        sheet.Name: sheet.Columns("A").ColumnWidth
+        for sheet in (source, calc, comparison)
+    }
 
-    # ========================================================
-    # 4. NUMBER FORMATS
-    # ========================================================
+    # Built-in Excel Comma Style number format.
+    comma_format = wb.Styles("Comma").NumberFormat
 
-    # Actual built-in Excel Comma Style number format
-    comma_format = workbook.Styles("Comma").NumberFormat
-
-    # Local Windows Short Date pattern
+    # Local Windows Short Date.
     date_format = get_short_date_format()
 
-    print("Comma Style:", comma_format)
-    print("Short Date:", date_format)
-
-    # ========================================================
-    # 5. SOURCE WORKSHEET
-    # ========================================================
+    # --------------------------------------------------------
+    # SOURCE
+    # --------------------------------------------------------
 
     headers = [
         "AssetName",
@@ -118,123 +183,89 @@ try:
         "ASAP_Other58",
     ]
 
-    for col, header in enumerate(headers, 1):
-        source.Cells(1, col).Value = header
+    for col, title in enumerate(headers, 1):
+        source.Cells(1, col).Value = title
 
     sample_data = [
-        (
-            "AALC2201-001",
-            datetime(2026, 10, 15),
-            1234567.89,
-            1250.50,
-            0.065,
-            30,
-            625.25,
-        ),
-        (
-            "AALC2201-002",
-            datetime(2026, 10, 15),
-            2500000.00,
-            0.00,
-            0.0725,
-            31,
-            0.00,
-        ),
-        (
-            "AALC2201-003",
-            datetime(2026, 10, 15),
-            875432.10,
-            35.64,
-            0.0575,
-            29,
-            17.82,
-        ),
+        ("Asset001", 1234567.89, 1200.50, 0.065, 30, 600.25),
+        ("Asset002", 2500000.00, 300.00, 0.075, 31, 150.00),
+        ("Asset003", 875432.10, 75.80, 0.055, 29, 37.90),
     ]
 
-    for row, data in enumerate(sample_data, 2):
-        for col, value in enumerate(data, 1):
-            source.Cells(row, col).Value = value
+    for row, data in enumerate(sample_data, start=2):
 
-    # Short Date
+        name, principal, charges, rate, days, benchmark = data
+
+        source.Cells(row, 1).Value = name
+        source.Cells(row, 2).Value = datetime(2026, 10, 15)
+        source.Cells(row, 3).Value = principal
+        source.Cells(row, 4).Value = charges
+        source.Cells(row, 5).Value = rate
+        source.Cells(row, 6).Value = days
+        source.Cells(row, 7).Value = benchmark
+
     source.Range("B2:B4").NumberFormat = date_format
 
-    # Monetary values
     for address in ("C2:D4", "G2:G4"):
         source.Range(address).NumberFormat = comma_format
 
-    # E and F retain General format
+    # Rate and Days remain General.
 
-    # ========================================================
-    # 6. CALCULATION WORKSHEET
-    # ========================================================
+    # --------------------------------------------------------
+    # CALCULATION
+    # --------------------------------------------------------
 
     calc_headers = [
         "AssetName",
-        "PaymentDate",
-        "Principal",
-        "LateCharges",
         "Other58_Excel",
-        "Accrual",
+        "Principal",
         "Rate",
         "Days",
+        "Accrual",
     ]
 
-    for col, header in enumerate(calc_headers, 1):
-        calc.Cells(1, col).Value = header
+    for col, title in enumerate(calc_headers, 1):
+        calc.Cells(1, col).Value = title
 
     for row in range(2, 5):
 
         calc.Cells(row, 1).Formula = f"=Source!A{row}"
 
-        # INDEX MATCH - PaymentDate
+        # Other58 = LateCharges / 2
+        # INDEX/MATCH exact matching.
         calc.Cells(row, 2).Formula = (
-            f"=INDEX(Source!$B$2:$B$4,"
-            f"MATCH(A{row},Source!$A$2:$A$4,0))"
+            "=INDEX(Source!$D$2:$D$4,"
+            f"MATCH(A{row},Source!$A$2:$A$4,0))/2"
         )
 
-        # INDEX MATCH - Principal
         calc.Cells(row, 3).Formula = (
-            f"=INDEX(Source!$C$2:$C$4,"
+            "=INDEX(Source!$C$2:$C$4,"
             f"MATCH(A{row},Source!$A$2:$A$4,0))"
         )
 
-        # INDEX MATCH - LateCharges
         calc.Cells(row, 4).Formula = (
-            f"=INDEX(Source!$D$2:$D$4,"
+            "=INDEX(Source!$E$2:$E$4,"
             f"MATCH(A{row},Source!$A$2:$A$4,0))"
         )
 
-        # Actual Other58 calculation
-        calc.Cells(row, 5).Formula = f"=D{row}/2"
-
-        # INDEX MATCH - Rate
-        calc.Cells(row, 7).Formula = (
-            f"=INDEX(Source!$E$2:$E$4,"
+        calc.Cells(row, 5).Formula = (
+            "=INDEX(Source!$F$2:$F$4,"
             f"MATCH(A{row},Source!$A$2:$A$4,0))"
         )
 
-        # INDEX MATCH - Days
-        calc.Cells(row, 8).Formula = (
-            f"=INDEX(Source!$F$2:$F$4,"
-            f"MATCH(A{row},Source!$A$2:$A$4,0))"
-        )
-
-        # Actual/360 Accrual
+        # Actual/360 example.
         calc.Cells(row, 6).Formula = (
-            f"=C{row}*G{row}*H{row}/360"
+            f"=C{row}*D{row}*E{row}/360"
         )
 
-    # Dates
-    calc.Range("B2:B4").NumberFormat = date_format
+    calc.Range("B2:C4").NumberFormat = comma_format
+    calc.Range("F2:F4").NumberFormat = comma_format
 
-    # Monetary fields
-    calc.Range("C2:F4").NumberFormat = comma_format
+    # D/E: General.
 
-    # Rate and Days remain General
-
-    # ========================================================
-    # 7. COMPARISON WORKSHEET
-    # ========================================================
+    # --------------------------------------------------------
+    # COMPARISON
+    # --------------------------------------------------------
 
     comp_headers = [
         "AssetName",
@@ -243,8 +274,8 @@ try:
         "Difference",
     ]
 
-    for col, header in enumerate(comp_headers, 1):
-        comparison.Cells(1, col).Value = header
+    for col, title in enumerate(comp_headers, 1):
+        comparison.Cells(1, col).Value = title
 
     for row in range(2, 5):
 
@@ -252,111 +283,239 @@ try:
             f"=Calculation!A{row}"
         )
 
-        # Excel calculated Other58
         comparison.Cells(row, 2).Formula = (
-            f"=INDEX(Calculation!$E$2:$E$4,"
+            "=INDEX(Calculation!$B$2:$B$4,"
             f"MATCH(A{row},Calculation!$A$2:$A$4,0))"
         )
 
-        # Mock ASAP SQL benchmark
         comparison.Cells(row, 3).Formula = (
-            f"=INDEX(Source!$G$2:$G$4,"
+            "=INDEX(Source!$G$2:$G$4,"
             f"MATCH(A{row},Source!$A$2:$A$4,0))"
         )
 
-        # Difference = Excel - ASAP
         comparison.Cells(row, 4).Formula = (
             f"=B{row}-C{row}"
         )
 
     comparison.Range("B2:D4").NumberFormat = comma_format
 
-    # ========================================================
-    # 8. RECALCULATE
-    # ========================================================
+    # Verify that all default column widths remain unchanged.
+    for sheet in (source, calc, comparison):
+        assert (
+            sheet.Columns("A").ColumnWidth
+            == original_widths[sheet.Name]
+        ), f"Column width changed on {sheet.Name}"
 
-    excel.CalculateFullRebuild()
+    return {
+        "comma": comma_format,
+        "date": date_format,
+        "widths": original_widths,
+    }
 
-    # ========================================================
-    # 9. SAVE AS XLSB
-    # ========================================================
 
-    workbook.SaveAs(
-        Filename=str(OUTPUT_FILE),
-        FileFormat=XL_EXCEL12,
+# ============================================================
+# 5. CREATE, SAVE, AND REOPEN XLSB
+# ============================================================
+
+def test_create(excel):
+
+    DOWNLOADS.mkdir(parents=True, exist_ok=True)
+
+    output = DOWNLOADS / (
+        "ASAP_Excel_Format_Test_"
+        f"{datetime.now():%Y%m%d_%H%M%S}.xlsb"
     )
 
-    # ========================================================
-    # 10. VERIFY
-    # ========================================================
+    wb = excel.Workbooks.Add()
 
-    print("\n--- WORKBOOK VERIFICATION ---")
+    try:
+        print("\nCreating workbook...")
 
-    print("Output:", OUTPUT_FILE)
-    print("FileFormat:", workbook.FileFormat)
-    print("Original Column Width:", default_width)
-    print(
-        "Current Column Width:",
-        source.Columns("A").ColumnWidth,
-    )
+        # Apply Internal before writing/saving.
+        apply_internal_label(wb)
 
-    print(
-        "Date Format:",
-        source.Range("B2").NumberFormat,
-    )
+        formats = populate_workbook(wb)
 
-    print(
-        "Money Format:",
-        source.Range("C2").NumberFormat,
-    )
+        excel.CalculateFullRebuild()
 
-    print(
-        "Rate Format:",
-        source.Range("E2").NumberFormat,
-    )
-
-    print(
-        "Days Format:",
-        source.Range("F2").NumberFormat,
-    )
-
-    print("\n--- FORMULA VERIFICATION ---")
-
-    for cell in ("C2", "D2", "E2", "F2"):
-        print(
-            "Calculation!" + cell,
-            "Formula:",
-            calc.Range(cell).Formula,
-            "Value:",
-            calc.Range(cell).Value,
+        wb.SaveAs(
+            Filename=str(output),
+            FileFormat=XL_EXCEL12,
         )
 
-    print("\n--- COMPARISON ---")
+        if wb.FileFormat != XL_EXCEL12:
+            raise RuntimeError("Workbook was not saved as XLSB.")
 
-    for row in range(2, 5):
-        asset = comparison.Cells(row, 1).Value
-        value_excel = comparison.Cells(row, 2).Value
-        value_asap = comparison.Cells(row, 3).Value
-        difference = comparison.Cells(row, 4).Value
+        if not output.is_file():
+            raise RuntimeError("Expected XLSB output was not found.")
 
-        print(
-            asset,
-            "Excel:", value_excel,
-            "ASAP:", value_asap,
-            "Difference:", difference,
-        )
+        print("\n--- CREATED WORKBOOK ---")
+        print("File:", output)
+        print("FileFormat:", wb.FileFormat)
+        print("Label:", get_workbook_label(wb))
+        print("Comma Format:", formats["comma"])
+        print("Short Date:", formats["date"])
 
-    if workbook.FileFormat != XL_EXCEL12:
-        raise RuntimeError("Workbook was not saved as XLSB.")
+    finally:
+        wb.Close(SaveChanges=False)
 
-    if source.Columns("A").ColumnWidth != default_width:
-        raise RuntimeError("Default column width was changed.")
+    # --------------------------------------------------------
+    # REOPEN TO VERIFY PERSISTED LABEL AND FORMULAS
+    # --------------------------------------------------------
 
-    print("\nSUCCESS: XLSB workbook created.")
+    print("\nReopening generated XLSB...")
 
-finally:
+    reopened = excel.Workbooks.Open(
+        Filename=str(output),
+        UpdateLinks=0,
+        ReadOnly=True,
+    )
 
-    if workbook is not None:
-        workbook.Close(SaveChanges=False)
+    try:
+        label = get_workbook_label(reopened)
 
-    excel.Quit()
+        if (
+            not label
+            or label["id"].lower() != DEFAULT_LABEL_ID.lower()
+        ):
+            raise RuntimeError(
+                "The saved XLSB did not retain the Internal label."
+            )
+
+        if reopened.FileFormat != XL_EXCEL12:
+            raise RuntimeError("Reopened file format is not XLSB.")
+
+        source = reopened.Worksheets("Source")
+        calc = reopened.Worksheets("Calculation")
+        comparison = reopened.Worksheets("Comparison")
+
+        print("\n--- FORMAT VERIFICATION ---")
+        print("Date:", source.Range("B2").NumberFormat)
+        print("Money:", source.Range("C2").NumberFormat)
+        print("Rate:", source.Range("E2").NumberFormat)
+        print("Days:", source.Range("F2").NumberFormat)
+        print("Column Width:", source.Columns("A").ColumnWidth)
+
+        print("\n--- FORMULA VERIFICATION ---")
+        print("Formula:", calc.Range("B2").Formula)
+        print("Excel Value:", calc.Range("B2").Value)
+
+        for row in range(2, 5):
+            asset = comparison.Cells(row, 1).Value
+            excel_value = comparison.Cells(row, 2).Value
+            asap_value = comparison.Cells(row, 3).Value
+            difference = comparison.Cells(row, 4).Value
+
+            print(
+                asset,
+                "| Excel:", excel_value,
+                "| ASAP:", asap_value,
+                "| Difference:", difference,
+            )
+
+            if not isinstance(difference, (int, float)):
+                raise RuntimeError(
+                    f"Invalid difference for row {row}: {difference!r}"
+                )
+
+            if abs(difference) > 1e-8:
+                raise RuntimeError(
+                    f"Comparison mismatch at row {row}: {difference}"
+                )
+
+        print("\nSUCCESS: Internal Label + XLSB + Formats + Formulas")
+
+    finally:
+        reopened.Close(SaveChanges=False)
+
+    print("\nOutput:", output)
+
+
+# ============================================================
+# 6. OPEN EXISTING WORKBOOK TEST
+# ============================================================
+
+def test_open(excel, file_path):
+
+    path = Path(file_path).expanduser().resolve()
+
+    if not path.is_file():
+        raise FileNotFoundError(path)
+
+    wb = excel.Workbooks.Open(
+        Filename=str(path),
+        UpdateLinks=0,
+        ReadOnly=True,
+    )
+
+    try:
+        label = get_workbook_label(wb)
+
+        if label:
+            print("\nExisting Label:", label["name"])
+
+            if label["id"].lower() != DEFAULT_LABEL_ID.lower():
+                print(
+                    "Existing label is not Internal. "
+                    "Preserving the original classification."
+                )
+
+        else:
+            print("No existing label confirmed.")
+            print("Applying Internal in this read-only test session.")
+
+            # In-memory only; original workbook is not saved.
+            apply_internal_label(wb)
+
+        print("Workbook:", wb.Name)
+        print("Worksheets:", wb.Worksheets.Count)
+        print("Current Label:", get_workbook_label(wb))
+
+    finally:
+        wb.Close(SaveChanges=False)
+
+    print("\nRead-only opening test completed.")
+
+
+# ============================================================
+# 7. MAIN
+# ============================================================
+
+def main():
+
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument(
+        "--mode",
+        choices=["create", "open"],
+        default="create",
+    )
+
+    parser.add_argument(
+        "--path",
+        help="Existing Excel workbook for open mode",
+    )
+
+    args = parser.parse_args()
+
+    if args.mode == "open" and not args.path:
+        parser.error("--path is required for open mode")
+
+    excel = win32.DispatchEx("Excel.Application")
+
+    # Visible for any Citi policy or Excel security prompts.
+    excel.Visible = True
+    excel.DisplayAlerts = True
+
+    try:
+        if args.mode == "create":
+            test_create(excel)
+        else:
+            test_open(excel, args.path)
+
+    finally:
+        excel.Quit()
+
+
+if __name__ == "__main__":
+    main()
