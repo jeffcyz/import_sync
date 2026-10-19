@@ -1,141 +1,151 @@
-这个问题可以一次性解决。你现在遇到的不是 `kb-validate` 本身的问题，而是 Python 没有找到 `asap_calc_replica` 这个 Package。
 
-你的项目采用 `src/` Layout：
+Continue the AALC2201 ASAP Calculation Replica project.
 
-```
-23.10+10 CheckerBuild/
-├── pyproject.toml
-├── src/
-│   └── asap_calc_replica/
-│       ├── __init__.py
-│       └── cli.py
-├── deals/
-├── knowledge/
-└── runs/
-```
+IMPORTANT CLARIFICATION OF THE CALCULATION OBJECTIVE
 
-Python 默认不会自动将 `src/` 加入模块搜索路径。
+I will provide two periods of AssetPeriodic data:
 
-我建议采用：Project Virtual Environment + Editable Installation + VS Code Interpreter 固定配置。
+- October 2026 = current period
+- September 2026 = period - 1
 
-这样不需要每次设置 `PYTHONPATH`，也不会影响其他 Python Projects。
+Both AssetPeriodic datasets contain POST-ASAP-calculation values.
 
-## 一、在 VS Code Terminal 一次性执行
+The September completed values may be used as historical
+inputs where the original script explicitly references
+period - 1 or an equivalent verified historical state.
 
-确认 Terminal 当前位于 `CheckerBuild` 根目录，然后复制执行：
+However, October script-generated field values must
+NEVER be reused as calculation inputs for reconstructing
+those same October fields.
 
-```
-# 1. Verify project structure
-if (!(Test-Path ".\pyproject.toml") -or
-    !(Test-Path ".\src\asap_calc_replica\__init__.py")) {
-    throw "Project root or Python package not found."
-}
+Our goal is to independently reconstruct EVERY field
+written by the original ASAP periodic calculation script
+using an Excel-native formula dependency chain.
 
-# 2. Create project-specific Python environment
-if (!(Test-Path ".\.venv\Scripts\python.exe")) {
-    python -m venv .venv
-}
+October post-run values are available for benchmarking,
+not for seeding the October calculation chain.
 
-# 3. Install the package into the environment
-& ".\.venv\Scripts\python.exe" -m pip install --upgrade pip
-& ".\.venv\Scripts\python.exe" -m pip install -e .
+TASK: REFINE PHASE 1 BEFORE EXCEL IMPLEMENTATION
 
-# 4. Verify Python can import the package
-& ".\.venv\Scripts\python.exe" -c "import asap_calc_replica; print(asap_calc_replica.__file__)"
-```
+1. Identify the complete write-set of the original
+   AALC2201 periodic calculation script.
 
-如果成功，第 4 步应该打印类似：
+2. Identify all source fields read by the script,
+   including implicit runtime dependencies.
 
-```
-H:\Analytics\xChen\...\CheckerBuild\
-src\asap_calc_replica\__init__.py
-```
+3. For every October AssetPeriodic field, distinguish:
 
-如果 `pip install -e .` 报依赖安装错误，应先修复对应依赖，不要继续执行后面的步骤。
+   A. Script-written calculated output
 
-## 二、让 VS Code 永久使用这个环境
+   B. External/source input not written by this script
 
-在 VS Code 按下 `Ctrl + Shift + P`，选择：
+   C. Historical state explicitly read from period - 1
 
-Python: Select Interpreter → `.venv\Scripts\python.exe`
+   D. Pre-script or intermediate state whose origin
+      is not yet confirmed
 
-也可以在当前 Workspace 的 `.vscode/settings.json` 中设置：
+4. Treat the complete October post-run AssetPeriodic
+   table as a mixed dataset containing both legitimate
+   source inputs and final calculated outputs.
 
-```
-{
-    "python.defaultInterpreterPath": "${workspaceFolder}\\.venv\\Scripts\\python.exe",
-    "python.terminal.activateEnvironment": true
-}
-```
+5. Do not allow October script-written final values
+   to feed any Excel reconstructed calculation.
 
-如果已有 `settings.json`，只添加这两项，不要覆盖其他设置。
+6. For every October script-written field, build a
+   formula lineage tracing back exclusively to:
+   - Legitimate current-period source inputs
+   - Verified runtime inputs
+   - Current-period reconstructed Excel intermediates
+   - Legitimate September historical values
+   - Explicit constants or parameters in the script
 
-然后关闭旧 Terminal，新建一个 Terminal，运行：
+7. Preserve the exact sequence of assignments.
 
-```
-python -c "import sys; print(sys.executable)"
-```
+   An individual output field may be initialized,
+   incremented, modified, overwritten or conditionally
+   assigned multiple times.
 
-应该指向 `CheckerBuild\.venv\Scripts\python.exe`。
+   Model each necessary intermediate state explicitly.
 
-之后就可以正常使用：
+8. Detect READ-BEFORE-WRITE dependencies.
 
-```
-python -m asap_calc_replica.cli kb-validate
-```
+   If a field is read before being initialized in
+   the visible script, identify its actual pre-script
+   value source.
 
-前提是你本地的 `cli.py` 已实现 `kb-validate` 子命令。如果后续出现 `invalid choice: kb-validate`，那是 CLI 功能问题，而不再是模块导入问题。
+   Never use its October post-run final value
+   as an initialization shortcut.
 
-## 三、让 Copilot 彻底修复并验证
+   Never assume zero initialization without evidence.
 
-如果你希望直接交给现有 GPT-5.6 Copilot Agent，我建议使用下面的 Prompt：
+9. Preserve:
+   - Transaction aggregation
+   - Transaction ordering when relevant
+   - Asset collection membership
+   - Portfolio aggregation
+   - Waterfall stages
+   - Sequential mutations
+   - Conditional branches
+   - Exceptions
+   - Prior-period carryforward
+   - Historical rewrite behavior
 
-```
+10. Build a stage-aware dependency graph.
 
-Fix the Python package import and execution environment
-permanently for this VS Code workspace.
+    For each assignment, identify the version of
+    every upstream field actually being read.
 
-Current error:
-ModuleNotFoundError: No module named 'asap_calc_replica'
+    Do not collapse multiple sequential writes into
+    a single field-level dependency if doing so
+    changes execution semantics.
 
-PROJECT:
-The repository uses a src-layout Python package with
-pyproject.toml and src/asap_calc_replica/.
+11. Separate the three types of October values:
+    - Original post-run source snapshot
+    - Independently reconstructed Excel values
+    - ASAP SQL benchmark values
 
-REQUIREMENTS:
+12. Add a strict calculation-isolation validation:
 
-1. Inspect the actual repository root and pyproject.toml.
-2. Verify src/asap_calc_replica/__init__.py exists.
-3. Diagnose the current Python interpreter and sys.path.
-4. Set up or repair the project-specific .venv.
-5. Install the project using editable installation:
-   python -m pip install -e .
-6. Configure VS Code to consistently use this .venv.
-7. Ensure new integrated terminals use the same interpreter.
-8. Do not rely on temporary PYTHONPATH modifications.
-9. Preserve all existing workspace settings and extensions.
-10. Verify import resolution from the actual interpreter.
-11. Verify the kb-validate CLI command is implemented.
-12. Run kb-validate and capture its exit status.
+    Changing October benchmark values must not
+    change any reconstructed Excel calculation.
 
-If Python 3.14.4 causes dependency compatibility issues,
-identify the exact incompatible dependency before proposing
-any Python version change.
+    Changing October post-run values of
+    script-written fields must not change any
+    reconstructed Excel calculation.
 
-Do not modify ASAP calculation logic or KB semantics.
+    Changing legitimate source inputs should
+    propagate through the dependent Excel formulas.
 
-Make the minimum necessary persistent configuration changes,
-then explain what was fixed and demonstrate successful execution.
+    Changing September historical values should
+    affect only the appropriate downstream
+    carryforward calculations.
 
-```
+13. Update the field readiness analysis based on
+    actual calculation prerequisites.
 
-我推荐你优先让 Copilot 执行这段 Prompt。 它能检查你的真实 Python 环境，避免我们凭截图猜测。
+14. Identify the smallest complete dependency chain
+    suitable for the first Excel prototype.
 
-另外，由于你的项目位于 `H:` 盘，假如这是公司 Network Drive，虚拟环境可能受到网络延迟或权限限制。如果确实遇到这种情况，可以把 `.venv` 建在公司允许的本地开发位置，Repository 仍然留在 `CheckerBuild`。
+15. Produce:
+    - script_write_set.csv
+    - source_input_classification.csv
+    - read_before_write_report.csv
+    - ordered_calculation_stages.json
+    - calculation_isolation_rules.md
+    - updated_field_readiness.csv
 
-最终需要达到的是：
+16. Save deal-specific reports under the local,
+    Git-ignored run reports directory.
 
-- 不再手动设置 `PYTHONPATH`。
-- 不再反复出现 `No module named asap_calc_replica`。
-- VS Code、Copilot 和 Terminal 使用同一个 Python Interpreter。
-- `pip install -e .` 只需在环境初次建立时执行；后续修改 `src/` 下的 Python 代码，不需要重新安装 Package。
+17. Update the implementation plan and progress
+    documentation.
+
+Do not execute ASAP.
+Do not generate the full Excel workbook yet.
+Do not alter the original ASAP script.
+Do not assume missing runtime semantics.
+
+Stop after the updated dependency and input/output
+isolation analysis.
+
+Present the remaining blockers before Phase 2.
