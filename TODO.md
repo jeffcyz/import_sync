@@ -1,189 +1,136 @@
 
-IMPORTANT CORRECTION TO THE PHASE 1 REFINEMENT:
+Continue the AALC2201 ASAP Calculation Replica project.
 
-The actual October and September datasets HAVE ALREADY
-BEEN PROVIDED as Excel workbooks.
+Phase 1.5B has been completed successfully.
 
-They are located at:
+The actual September and October workbooks have been
+ingested and validated.
 
-runs/AALC2201/2026-10/inputs/original/
+CURRENT OBJECTIVE:
+Prepare missing runtime inputs and implement the first
+small, independently verifiable Excel formula prototype.
 
-I can see four Excel files in this directory:
+Do not repeat the full Phase 1 analysis.
+Do not rebuild the ASAP Knowledge Base.
+Do not attempt all 56 calculated fields yet.
 
-1. Assets - AALC2201.xlsx
-2. Asset Periodics - 2026-09-15...xlsx
-3. Asset Periodics - 2026-10-15...xlsx
-4. Asset Periodic Transaction - 20...xlsx
+PART 1 — RUNTIME INPUT DISCOVERY
 
-Use filesystem discovery to identify their exact names.
-
-The previous Phase 1 report incorrectly characterized
-these datasets as not yet provided.
-
-They are PRESENT but have NOT BEEN INGESTED.
-
-CURRENT TASK:
-Phase 1.5B — Actual Excel Source Discovery and
-Data Dependency Resolution.
-
-Do not regenerate the existing static dependency graph
-unless actual workbook schemas reveal a necessary change.
-
-STEP 1 — VERIFY LOCAL FILES
-
-- Confirm the actual workspace/repository root.
-- Enumerate all Excel workbooks in inputs/original/.
-- Report exact filenames, sizes, worksheet names,
-  dimensions, headers and data types.
-- Do not rely only on Git-tracked file discovery.
-- Do not require manually converted CSV files.
-
-STEP 2 — IDENTIFY SOURCE TABLE ROLES
-
-Determine which workbook/worksheet corresponds to:
-
-- AssetSetup
-- September AssetPeriodic (period - 1)
-- October AssetPeriodic (current period)
-- AssetPeriodicTransaction
-- AssetPeriodicLegacy, if applicable
-
-Do not assume that each workbook contains only
-one worksheet.
-
-Use actual worksheet schemas and field names,
-not filenames alone, to confirm table mapping.
-
-STEP 3 — VALIDATE PERIOD MAPPING
-
-Identify the current ASAP period number and the
-previous period number.
-
-The September and October dates in filenames
-are candidate payment dates, not proof of the
-ASAP period index.
-
-Verify the mapping against available runtime inputs
-and document any missing period information.
-
-STEP 4 — VALIDATE SOURCE KEYS
-
-Inspect actual data to determine:
-
-- AssetId
-- DealId
-- AssetName
-- PaymentDate
-- Transaction identifiers
-- Relevant composite keys
-
-Verify uniqueness and referential relationships.
-
-Do not assume AssetName is unique.
-
-STEP 5 — CONNECT DATA TO THE EXISTING DEPENDENCY GRAPH
-
-Read:
-- script_write_set.csv
-- source_input_classification.csv
-- read_before_write_report.csv
-- ordered_calculation_stages.json
-- calculation_dependency_graph.json
+Review:
+- Existing Phase 1 and Phase 1.5 reports
 - required_inputs.json
-- missing_inputs.csv
-
-For each dependency, determine whether its data
-actually exists in the provided Excel workbooks.
-
-Resolve previously reported data gaps using
-actual worksheet columns.
-
-Do not classify a field as missing merely because
-it is not present as a CSV file.
-
-STEP 6 — ENFORCE CALCULATION ISOLATION
-
-The October AssetPeriodic values are post-ASAP-run.
-
-For the 56 script-written fields:
-
-- October final values are benchmarks only.
-- Never use October final script-written values
-  as inputs to reconstructed formulas.
-- October non-script-written fields can be inputs
-  when semantically valid.
-- September completed values are permitted only
-  for verified historical dependencies.
-
-Detect and block output leakage.
-
-For read-before-write fields, confirm whether the
-necessary pre-script state exists separately.
-
-Do not use October final values to fill missing
-pre-script state.
-
-STEP 7 — IMPLEMENT A REUSABLE EXCEL SOURCE LOADER
-
-If the repository does not already support original
-Excel workbook ingestion, implement the minimum
-necessary read-only ingestion functionality.
-
-Requirements:
-
-- Support multiple XLSX workbooks.
-- Support multiple worksheets per workbook.
-- Use openpyxl or an appropriate Excel reader.
-- Preserve original files without modification.
-- Retain numeric precision, blank cells, dates,
-  identifiers and source column names.
-- Identify duplicate or missing keys.
-- Do not convert to CSV unless required.
-- Do not generate final Excel calculation formulas yet.
-
-Design the loader so other AALC deals can reuse it.
-
-STEP 8 — REFRESH ACTUAL DATA READINESS
-
-Produce:
-
-- workbook_inventory.csv
-- worksheet_schema_inventory.csv
-- source_table_mapping.json
-- period_mapping_report.md
-- asset_key_validation.csv
-- input_dependency_coverage.csv
 - revised_missing_inputs.csv
-- updated_field_readiness.csv
+- ordered_calculation_stages.json
+- Existing ASAP Knowledge Base
+- Actual October and September Excel datasets
 
-Distinguish:
+Determine the remaining required runtime inputs.
 
-PRESENT_AND_VALIDATED
-PRESENT_BUT_MAPPING_UNRESOLVED
-ABSENT
-NOT_APPLICABLE
+Prioritize:
+1. Current ASAP period number
+2. Previous ASAP period number
+3. CollectionStart, CollectionEnd, PriorMonthBeg
+4. Aggregate_Servicing_Fees.InputValue
+5. h15tly index observations
+6. Active asset membership
+7. Transaction ordering
+8. Reachable pre-script Other1 / Other3 dependencies
 
-STEP 9 — REPORT REMAINING BLOCKERS
+Retrieve available information from existing
+documentation and authorized local inputs.
 
-After reading the actual Excel files, identify
-which dependencies are still missing.
+Do not invent unknown values.
 
-Specifically check:
+Create a runtime input schema and an input template
+under the October run directory.
 
-- payment_inputs
-- ASAP period number
-- deal.critical_dates
-- index observations
-- pre-script initialization values
-- runtime collection semantics
-- transaction ordering
+Report only the values that genuinely require
+manual input or an additional ASAP export.
 
-Do not assume these are present unless verified.
+PART 2 — FIRST EXCEL PROTOTYPE
 
-Run the appropriate automated tests.
+Start with AssetPeriodic.Other58.
 
-Do not modify original Excel workbooks.
+Source logic:
+Other58 = LateCharges / 2
+
+Preserve the original script's active-asset filtering
+and execution conditions.
+
+Use the actual October AssetPeriodic workbook
+as the input source.
+
+Use the October post-ASAP Other58 values strictly
+as benchmarks.
+
+Never reference October final Other58 values
+in the reconstructed calculation.
+
+Build a small workbook containing:
+
+- October source data
+- Asset calculation
+- ASAP benchmark
+- Comparison
+
+Comparison should contain identity columns and:
+
+Excel
+ASAP SQL
+Difference
+
+Difference = Excel - ASAP SQL
+
+FORMATTING REQUIREMENTS
+
+- Use Excel COM on Windows.
+- Create workbook with Workbooks.Add().
+- Preserve local default Excel formatting.
+- Never change column widths.
+- Dates use Short Date.
+- Monetary amounts use built-in Comma Style.
+- All other values use General.
+- Use INDEX/MATCH for cross-sheet lookups.
+- No decorative formatting.
+
+PART 3 — VALIDATION
+
+1. Verify the Excel calculation contains native formulas.
+2. Perform actual Excel recalculation.
+3. Verify asset matching.
+4. Compare calculated Other58 against ASAP output.
+5. Perform calculation isolation tests:
+   - Changing benchmark Other58 must not change
+     reconstructed Other58.
+   - Changing source LateCharges must change
+     reconstructed Other58 appropriately.
+6. Report all discrepancies.
+7. Do not silently treat unmatched assets as zero.
+
+IMPORTANT:
+
+If active asset membership cannot be established,
+do not fabricate a filter.
+
+You may demonstrate an explicitly provisional
+arithmetic formula on verified example rows, but
+do not claim full ASAP equivalence.
+
+Stop and report the minimum missing runtime evidence
+needed to complete the prototype.
+
+PART 4 — DELIVERABLES
+
+- Runtime input template
+- Remaining input requirements
+- Other58 prototype Excel workbook, if supported
+- Formula isolation test results
+- SQL comparison results
+- Updated progress.md
+- Updated implementation_plan.md
+
+Do not modify original source workbooks.
 Do not modify original ASAP scripts.
-Do not generate the final Excel workbook yet.
+Do not implement the remaining 55 fields yet.
 
-Stop after producing the revised data readiness report.
+Stop after this prototype and wait for my approval.
