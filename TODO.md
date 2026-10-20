@@ -1,16 +1,26 @@
-print("=== LOGGING DIAGNOSTICS ===")
+import logging
+import sys
 
-root = logging.getLogger()
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+logger.disabled = False
 
-print("Root Level:", root.level)
-print("Root Handlers:", root.handlers)
-print("Logger Name:", logger.name)
-print("Logger Effective Level:", logger.getEffectiveLevel())
-print("Logger Disabled:", logger.disabled)
-print("Logging Global Disable:", logging.root.manager.disable)
+# Remove old handlers attached to this logger
+for handler in list(logger.handlers):
+    logger.removeHandler(handler)
 
-print("=== TEST ===")
-print("Normal print works")
+# Redirect logging to ASAP OUTPUT
+handler = logging.StreamHandler(sys.stdout)
+handler.setLevel(logging.DEBUG)
+
+handler.setFormatter(logging.Formatter(
+    '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+))
+
+logger.addHandler(handler)
+logger.propagate = False
+
+# Test
 logger.debug("DEBUG TEST")
 logger.info("INFO TEST")
 logger.warning("WARNING TEST")
