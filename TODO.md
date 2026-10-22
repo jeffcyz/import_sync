@@ -1,19 +1,35 @@
-Hi HR Team,
+Hi Dan,
 
-My manager has helped correct my return-to-work date to October 12, 2026. However, October 12 still shows as unpaid leave in Workday, even though it was a company-paid holiday.
+I wanted to summarize the key takeaways from my discussion with Rani (PwC) and get your feedback on the proposed direction.
 
-This happened because I did not complete the "Return from Leave" action in Workday until October 20, after I had already returned to work. My manager was able to correct my return date but is unable to change the unpaid leave status for October 12 from his end.
+1. Deal-Level Input Management
 
-Since my official return-to-work date is October 12, I believe I should be eligible for holiday pay.
+We agreed on introducing a configurable, free-form table under Deal Settings to centrally organize deal setup parameters and other deal-specific input values, rather than managing them individually within scripts.
 
-To clarify the correction request, here are the key case details:
+Importantly, this would be a general-purpose deal-level input management feature, not a parameter table strictly tied to Global Functions.
 
-- **Subject Person:** Jeff Chen
-- **Date:** October 12, 2026
-- **Requested Correction:** Change October 12 from unpaid leave to paid holiday in Workday and update the corresponding payroll records.
-- **Manager:** Dinsmore Sohn (dinsmore.sohn@citi.com)
-- **Manager Approval:** Dinsmore has already assisted with correcting my return-to-work date. Please let me know if his additional approval is required to process this specific adjustment.
+For example, defining `MaxRate = 5` in the table would allow both deal scripts and Global Functions to reference `deal.MaxRate` directly, eliminating repeated parameter passing or hardcoded assignments and improving consistency and maintainability.
 
-Could you please confirm whether October 12 should be treated as a paid holiday and help process the correction accordingly?
+Rani also encouraged keeping this module broadly named and extensible rather than limiting it to validation parameters, allowing it to support additional use cases in the future.
 
-Thank you for your assistance!
+2. Parameter Pre-Validation
+
+We discussed the parameter pre-validation step previously proposed by our team, which PwC confirmed is feasible. This would help identify missing or invalid parameters before they cause runtime failures.
+
+From a system performance perspective, we agreed it would be more efficient to incorporate this into Setup Validation rather than repeatedly running the same checks during each periodic execution.
+
+3. User-Defined Variables & Recursive Checks
+
+I mentioned that user-defined values can be retrieved from Global Variables. PwC raised concerns about recursive references and dependencies and suggested handling those checks within the reporting functionality rather than individual Global Functions. I think this is a reasonable accommodation.
+
+4. Validation Portfolio & Reporting Architecture
+
+We also briefly discussed my ValidationEngine portfolio manager. We agreed that Global Functions should return structured results (dictionary/JSON) rather than using `print` or `fs.output` to write directly to the output stream.
+
+A separate reporting layer would handle result aggregation, error summaries, severity levels, recommended actions, and message distribution.
+
+One architectural question remains open: whether to continue managing validation portfolios through our custom Global Function class (`ValidationEngine`) or provide PwC with the requirements to implement this functionality natively within ASAP2.
+
+I'd appreciate your direction on the topics above, along with any additional comments, requirements, or priorities you'd like us to consider as we move forward.
+
+Thanks!
