@@ -1,56 +1,11 @@
+Hi HR Team,
 
-import sys
+My manager has helped correct my return-to-work date to October 12, 2026. However, October 12 still shows as unpaid leave in Workday, even though it was a company-paid holiday.
 
-print("=== STREAM TEST ===")
+This happened because I did not complete the "Return from Leave" action in Workday until October 20, after I had already returned to work. My manager was able to correct my return date but is unable to change the unpaid leave status for October 12 from his end.
 
-print("TEST 1: print works")
+Since my official return-to-work date is October 12, I believe I should be eligible for holiday pay.
 
-try:
-    sys.stdout.write("TEST 2: stdout.write works\n")
-    sys.stdout.flush()
-except Exception as e:
-    print("stdout error:", str(e))
+Could you please confirm whether October 12 should be treated as a paid holiday and, if so, help correct the unpaid leave record and any related payroll adjustments?
 
-try:
-    sys.stderr.write("TEST 3: stderr.write works\n")
-    sys.stderr.flush()
-except Exception as e:
-    print("stderr error:", str(e))
-
-print("=== END ===")
-
-
-
-
-import logging
-
-class ASAPHandler(logging.Handler):
-    def emit(self, record):
-        try:
-            print(self.format(record))
-        except Exception as e:
-            print("Logging error: {}".format(e))
-
-logger = logging.getLogger("asap_waterfall")
-logger.setLevel(logging.DEBUG)
-logger.disabled = False
-logger.propagate = False
-
-for h in list(logger.handlers):
-    logger.removeHandler(h)
-
-handler = ASAPHandler()
-handler.setLevel(logging.DEBUG)
-handler.setFormatter(logging.Formatter(
-    "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-))
-
-logger.addHandler(handler)
-
-_info = logger.info
-_debug = logger.debug
-_warn = logger.warning
-
-
-
-
+Thank you for your help!
