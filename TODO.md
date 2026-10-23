@@ -1,35 +1,32 @@
-Hi Dan,
+Hi HR/Payroll Team,
 
-I wanted to summarize the key takeaways from my discussion with Rani (PwC) and get your feedback on the proposed direction.
+I am submitting a new case regarding missing wages in my October 23, 2026 paycheck following my return from parental leave.
 
-1. Deal-Level Input Management
+Background:
+- My official return-to-work date was October 12, 2026, which was a company-paid holiday.
+- Due to a delayed "Return from Leave" submission in Workday, my status initially remained on unpaid leave.
+- With my manager's assistance, the Workday leave correction was completed on October 21, 2026.
 
-We agreed on introducing a configurable, free-form table under Deal Settings to centrally organize deal setup parameters and other deal-specific input values, rather than managing them individually within scripts.
+Payroll Issue:
 
-Importantly, this would be a general-purpose deal-level input management feature, not a parameter table strictly tied to Global Functions.
+My October 23 payslip (pay period October 4–17) reflects:
+- STD: 40 hours ($3,452.06) for October 4–11
+- Holiday: 8 hours ($690.42) for October 12
+- Missing Regular Pay: 32 hours (approximately $2,761.64 gross) for October 13–16
 
-For example, defining `MaxRate = 5` in the table would allow both deal scripts and Global Functions to reference `deal.MaxRate` directly, eliminating repeated parameter passing or hardcoded assignments and improving consistency and maintainability.
+Although my return-to-work status has been corrected, these four working days were not included in my October 23 paycheck.
 
-Rani also encouraged keeping this module broadly named and extensible rather than limiting it to validation parameters, allowing it to support additional use cases in the future.
+Requested Assistance:
 
-2. Parameter Pre-Validation
+Could you please confirm:
 
-We discussed the parameter pre-validation step previously proposed by our team, which PwC confirmed is feasible. This would help identify missing or invalid parameters before they cause runtime failures.
+1. Whether the missing 32 hours will be processed as a retroactive payroll adjustment in the next payroll cycle.
+2. Whether an off-cycle payment can be arranged to expedite the missing wages.
+3. The expected payment date and whether any additional action or manager approval is required.
 
-From a system performance perspective, we agreed it would be more efficient to incorporate this into Setup Validation rather than repeatedly running the same checks during each periodic execution.
+I would appreciate your assistance in resolving this payroll discrepancy as soon as possible.
 
-3. User-Defined Variables & Recursive Checks
+Thank you for your help.
 
-I mentioned that user-defined values can be retrieved from Global Variables. PwC raised concerns about recursive references and dependencies and suggested handling those checks within the reporting functionality rather than individual Global Functions. I think this is a reasonable accommodation.
-
-4. Validation Portfolio & Reporting Architecture
-
-We also briefly discussed my ValidationEngine portfolio manager. We agreed that Global Functions should return structured results (dictionary/JSON) rather than using `print` or `fs.output` to write directly to the output stream.
-
-A separate reporting layer would handle result aggregation, error summaries, severity levels, recommended actions, and message distribution.
-
-One architectural question remains open: whether to continue managing validation portfolios through our custom Global Function class (`ValidationEngine`) or provide PwC with the requirements to implement this functionality natively within ASAP2.
-
-I'd appreciate your direction on the topics above, along with any additional comments, requirements, or priorities you'd like us to consider as we move forward.
-
-Thanks!
+Best regards,  
+Yuanzhi Chen
