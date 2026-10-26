@@ -1,144 +1,304 @@
-可以。建议把这四个 Markdown 按原文完整合并成一个通用的 `ASAP_KNOWLEDGE_CONTEXT.md`，并为每份文档保留独立的 `SOURCE_ID`、文件名、SHA-256 和内容边界。
+# ASAP Validation Enrichment — Single Validation Workflow
 
-这样每次新的 Claude Session 都可以使用同一个 Knowledge Context，而不必分别粘贴四份 Markdown。Claude 也能够明确区分哪些信息来自 Scripting Manual、User Manual、Release Notes 或 SQL Schema。
+> 适用范围：**一个 Claude Session 只处理一个编号 Validation Record（含其全部 Continuation Rows）**。
+> 
+> 本文适用于新版 `tools/single_validation.py`：支持 `--manual-mode shared`（默认）、`full`、`selected` 以及 `--embed-shared`。**如果你本地还是旧版脚本（仅支持 full/selected），必须先替换新版脚本；仅更新此文档不会让旧脚本自动支持 shared。**
 
-## 一、推荐输出结构
+## 1. 目标与原则 / Goal
 
-```
+每次指定一个 `record_id`，将其原始 Validation Master 规则与 ASAP Knowledge Context 一起提供给全新的 Claude 对话。Claude 只为该 Record 及附加条件生成：
+
+- `implementation_spec`：Required Data Points、ASAP Runtime Access、Calculation Steps、Validation Logic、Source Evidence 和未解决问题；
+- `QA_R###.json`：本次分析覆盖率、证据情况和剩余问题。
+
+**Python 负责准备数据、校验和增量合并；Claude 负责阅读来源并分析技术逻辑。** 原始 `validation_master_flat.json` 不会被 `prepare` 或 `merge` 改写。`development_status` 是既有进度属性，不能被 Claude 的 Spec Readiness 覆盖。
+
+业务规则以 Validation Master 为准；ASAP Runtime API 以实际提供的 Scripting Manual 为准；User Manual 用于业务语义；Release Notes 用于版本限制；SQL Schema 仅证明数据库元数据，**不能单独证明 Runtime 对象支持直接访问**。未证实的 API、容差、计算公式、默认值应保持 `null` 或标为 `unresolved`，而不是猜测。
+
+## 2. 项目目录 / Directory Layout
+
+在 `ASAP-Validation-Enrichment/` 根目录执行下面所有命令。
+
+```text
 ASAP-Validation-Enrichment/
-│
 ├── source/
-│   ├── validation_master_flat.json
-│   ├── merged_scripting_manual.md
-│   ├── merged_user_manual.md
-│   ├── Releases-be4181818e.md
-│   └── schema_catalog.md
-│
+│   ├── validation_master_flat.json        # 原始 Flat JSON；不要直接 enrich
+│   ├── merged_scripting_manual.md         # ASAP Runtime 技术依据
+│   ├── merged_user_manual.md              # ASAP 业务和应用依据
+│   ├── Releases-be4181818e.md            # 版本与兼容性
+│   └── schema_catalog.md                  # SQL Table/View/Column 目录
+├── control/
+│   ├── ROW_REGISTRY.jsonl                 # build_registry.py 生成
+│   ├── PROJECT_STATE.json                 # 来源 SHA-256；本工作流不依赖旧 Session 状态
+│   └── SPEC_SCHEMA.json                   # implementation_spec 固定 Schema
+├── context_packs/
+│   ├── shared/
+│   │   └── ASAP_KNOWLEDGE_CONTEXT.md      # 4 份 Markdown 的合并版本
+│   └── by_record/
+│       ├── R020_HEADER.txt
+│       ├── R020_CONTEXT.txt
+│       └── R020_EXECUTE.txt
+├── prompts/
+│   ├── SINGLE_VALIDATION_HEADER.md
+│   └── SINGLE_VALIDATION_EXECUTE.md
+├── patches/by_record/
+│   └── SPEC_R020.jsonl                     # Claude 输出，合并前须验证
+├── qa/by_record/
+│   └── QA_R020.json                        # Claude QA 输出，单独保存
+├── final/
+│   ├── validation_master_enriched.json    # 本地增量合并结果
+│   └── validation_master_enriched_*.bak.json  # 旧版本备份
 ├── tools/
-│   ├── single_validation.py
-│   └── build_asap_context.py        ← 新建
-│
-└── context_packs/
-    └── shared/
-        └── ASAP_KNOWLEDGE_CONTEXT.md  ← 自动生成
+│   ├── build_registry.py
+│   ├── build_asap_context.py
+│   └── single_validation.py               # 本文对应新版脚本
+└── docs/
+    └── ONE_VALIDATION_WORKFLOW.md
 ```
 
-## 二、完整 Python 代码
+真实的公司手册、原始 Validation JSON、Context Pack、Claude Patch 和 QA 结果应留在获公司批准的本地环境；**不要提交到公开 GitHub 仓库**。确认项目 `.gitignore` 已排除这些文件，提交前仍须人工检查 `git status`。
 
-在 `tools/` 下新建 `build_asap_context.py`，粘贴：
+## 3. 首次初始化 / One-time Setup
 
+### 3.1 准备五份来源
+
+将原始 Flat JSON 与四份 Markdown 按上表文件名放入 `source/`。JSON 应包含 `record_id`、`parent_record_id`、`row_type` 和已有开发状态；不应是先前 enrichment 后的数据。
+
+### 3.2 建立 Row Registry
+
+```powershell
+py tools/build_registry.py
 ```
-from pathlib import Pathfrom hashlib import sha256# Project rootROOT = Path(__file__).resolve().parents[1]SOURCE_DIR = ROOT / "source"OUTPUT_FILE = (    ROOT    / "context_packs"    / "shared"    / "ASAP_KNOWLEDGE_CONTEXT.md")# Source documents and stable identifiersSOURCES = [    (        "ASAP_SCRIPTING_MANUAL",        "SM-FULL",        "merged_scripting_manual.md",    ),    (        "ASAP_USER_MANUAL",        "UM-FULL",        "merged_user_manual.md",    ),    (        "ASAP_RELEASE_NOTES",        "RN-FULL",        "Releases-be4181818e.md",    ),    (        "ASAP_SCHEMA_CATALOG",        "SC-FULL",
-```
 
-## 三、运行命令
+预期生成：
 
-在 `ASAP-Validation-Enrichment` 根目录执行：
+- `control/ROW_REGISTRY.jsonl`：编号记录对应 `R001`、`R020` 等；附加行对应 `C020-01` 等；每行包含原始数据 Fingerprint。
+- `control/PROJECT_STATE.json`：保存原始 Flat JSON 的 SHA-256。
 
-```
+原始 JSON **改变时**需要重建 Registry，但旧 Patch 的 Hash 将可能失效，已有 Enriched 文件也可能无法与新基线合并。不要通过修改 Hash 绕过检查，应先进行版本迁移或重新生成相关 Patch。
+
+### 3.3 构建共享知识文档
+
+```powershell
 py tools/build_asap_context.py
 ```
 
-程序将依次读取四份 Markdown，并显示各自大小。
+预期生成：
 
-最终输出：
+`context_packs/shared/ASAP_KNOWLEDGE_CONTEXT.md`
 
-```
-Context successfully generated.
+它包含四份原文，并以 `SOURCE_ID` 和 `BEGIN SOURCE / END SOURCE` 界定来源。四份 Manual 有变化时重新运行即可。**将它们合并只减少本地管理和粘贴次数，不会减少 Claude 实际处理的 Token 数量。**
 
-Output: ...\context_packs\shared\ASAP_KNOWLEDGE_CONTEXT.md
-```
+建议检查：
 
-直接在 VS Code 中打开：
-
-```
-code context_packs/shared/ASAP_KNOWLEDGE_CONTEXT.md
+```powershell
+Test-Path context_packs/shared/ASAP_KNOWLEDGE_CONTEXT.md
+Get-Item context_packs/shared/ASAP_KNOWLEDGE_CONTEXT.md | Select-Object Name,Length
 ```
 
-## 四、生成的 Markdown 长什么样？
+如果出现 `assert actual == combined`（Windows CRLF/LF 换行问题），在 `build_asap_context.py` 中改用 `write_bytes(combined.encode("utf-8"))` 和 `read_bytes().decode("utf-8")` 作字节一致性验证。
 
-ASAP_KNOWLEDGE_CONTEXT.md
+## 4. 每条 Validation 的标准流程 / Per-record Procedure
 
+以下以 **Record #20** 为例；其他 ID 替换 `20` 即可。
 
+### Step 1 — Generate record-specific Claude Context
 
-# ASAP KNOWLEDGE CONTEXT
+```powershell
+py tools/single_validation.py prepare --id 20
+```
 
+新版脚本的默认 Manual Mode 为 `shared`。它先确认共享文档存在及四个 Source ID 是否齐全，然后生成：
 
+```text
+context_packs/by_record/R020_HEADER.txt
+context_packs/by_record/R020_CONTEXT.txt
+context_packs/by_record/R020_EXECUTE.txt
+```
 
-来源说明、文档用途、Source Index
+`R020_CONTEXT.txt` **只含**当前编号记录、属于它的全部 Continuation Rows、对应 Row Registry 和 SPEC_SCHEMA；不会再嵌入四份 Manual，因此体积较小。
 
+`prepare` **不会**生成 `SPEC_R020.jsonl`，也不会更新最终 JSON。
 
+### Step 2 — New Claude conversation / 粘贴顺序
 
-# SOURCE: ASAP_SCRIPTING_MANUAL
+每条 Validation **重新开启一个 Claude Session**，按以下顺序提供资料：
 
+1. `R020_HEADER.txt`：本次任务身份与约束，Claude 应等待最后的 Execute 指令。
+2. `R020_CONTEXT.txt`：原始 Validation、Row Key/Fingerprint 和固定 Schema。
+3. `context_packs/shared/ASAP_KNOWLEDGE_CONTEXT.md`：通用 ASAP 文档全文（必要时按完整 Source Blocks 分次 Paste）。
+4. `R020_EXECUTE.txt`：**最后发送**，启动本 Record 的深度分析。
 
+**重要：本地路径不代表 Claude 能读取本地文件。** 必须实际粘贴 Markdown 的内容，或通过经批准的 Chat 页面 Pasted Text 附件提供，而不是只在消息中写文件路径。不要同时粘贴四份独立 Manual 和 Shared Context，避免重复消耗 Token。
 
-原始 Scripting Manual 全文、文件名、SHA-256
+如果希望**一个 Record Context 文件包含 Shared 全文**，也可以运行：
 
+```powershell
+py tools/single_validation.py prepare --id 20 --embed-shared
+```
 
+此时粘贴顺序改为 `HEADER → CONTEXT → EXECUTE`，**不要再额外粘贴 Shared 文件**。
 
-# SOURCE: ASAP_USER_MANUAL
+> 提示：`--embed-shared` 是本地拼接选项，并不减少 Token。若 Context 太长，应改用 Selected Mode。
 
+### Step 3 — Claude outputs / 本地保存
 
+Claude 完成后应生成两个 Artifact：
 
-原始 User Manual 全文
+| Claude 输出 | 保存位置 | 功能 |
+|---|---|---|
+| `SPEC_R020.jsonl` | `patches/by_record/SPEC_R020.jsonl` | `R020` 以及所有 `C020-##` 的 Specs |
+| `QA_R020.json` | `qa/by_record/QA_R020.json` | 来源、假设、缺口和 Readiness 报告 |
 
+`SPEC_R020.jsonl` 要求：**一行一个完整 JSON 对象**，不得带 Markdown 的 ```jsonl 代码围栏，也不是 JSON Array。
 
+每条 Patch 对象的外层字段固定为：
 
-# SOURCE: ASAP_RELEASE_NOTES
+```json
+{"row_key":"R020","source_row_sha256":"<从本地 ROW_REGISTRY 取得的精确哈希>","implementation_spec":{"...":"根据真实来源完整填写"}}
+```
 
+上面的结构只是示意；不能将占位符原样当作实际 Patch。若 #20 有一个 Continuation，则应另外有 `C020-01` 的独立 JSONL 行。`source_row_sha256` 必须与本地 Registry 完全一致。
 
+### Step 4 — Validate the patch / 本地校验
 
-Release Notes 全文
+```powershell
+py tools/single_validation.py validate --id 20
+```
 
+至少检查：JSONL 可以解析、Row Key 不缺失/不重复、Continuation Rows 全覆盖、每个 Patch 对应的原始 Fingerprint 正确，以及 `implementation_spec` 满足本项目 Schema 的必需字段和支持的类型约束。
 
+**此检查不能保证 Claude 的 ASAP API 映射或公式真的正确。** 必须对重要技术结论核对所引用的 Manual 章节，`implementation_readiness: ready` 不应替代证据审查。
 
-# SOURCE: ASAP_SCHEMA_CATALOG
+如果验证失败，先检查 `SPEC_R020.jsonl` 是否确实使用当前 Registry 的真实 Hash、是否包含所有关联 Row Keys，以及有无从 Claude 复制出的代码围栏。
 
+### Step 5 — Incremental Merge / 增量写入
 
+验证通过后运行：
 
-SQL Schema Catalog 全文
+```powershell
+py tools/single_validation.py merge --id 20
+```
 
-Claude 可以通过这些明确的 `SOURCE_ID` 来引用不同文档的证据，而不是只看到一份无法区分来源的长文本。
+输出：
 
-## 五、Claude Session 中如何引用这个文件？
+`final/validation_master_enriched.json`
 
-在 Claude 开始分析 Validation #2 时，提供两个主要 Context：
+第一次 Merge：基于原始 Flat JSON 创建 Enriched JSON，只添加 #20 和 Continuation Rows 的 `implementation_spec`。
 
-第一个： 当前 Validation 的数据、Row Registry 和 Spec Schema。
+之后处理 #21：
 
-第二个： `ASAP_KNOWLEDGE_CONTEXT.md` 全文。
+```powershell
+py tools/single_validation.py prepare --id 21
+# New Claude conversation; 保存 SPEC_R021.jsonl / QA_R021.json
+py tools/single_validation.py validate --id 21
+py tools/single_validation.py merge --id 21
+```
 
-然后在执行 Prompt 中加入以下固定指令：
+这会在**同一份** `final/validation_master_enriched.json` 中保留 #20，新增 #21，不会将原有记录清空。
 
-## Shared ASAP Knowledge Context
+重新分析一个已经 Merge 的 Record，需要显式使用：
 
-The pasted document identified as `ASAP_KNOWLEDGE_CONTEXT` contains four original ASAP reference sources, each separated by explicit SOURCE_ID and CONTENT boundaries.
+```powershell
+py tools/single_validation.py merge --id 20 --replace
+```
 
-Use these sources for all ASAP-specific technical research in this session.
+新版脚本替换前会为现有 Enriched JSON 创建带时间戳的 `.bak.json` 备份；操作完成后可检查 `final/`。
 
-When identifying Runtime APIs, field mappings, calculation dependencies, and validation logic:
+### Step 6 — Open / Verify final output
 
-- Cite the original SOURCE_ID and relevant section heading.
-- Treat ASAP_SCRIPTING_MANUAL as the primary authority for Runtime API access.
-- Use ASAP_USER_MANUAL for business semantics and application behavior.
-- Use ASAP_RELEASE_NOTES to evaluate version-specific changes.
-- Use ASAP_SCHEMA_CATALOG only as database metadata, not proof of Runtime API access.
-- Do not invent undocumented Runtime symbols, fields, methods, or access expressions.
-- Preserve unresolved technical mappings as null.
+```powershell
+code final/validation_master_enriched.json
+# 或
+explorer final
+```
 
-Analyze only the specified Validation Record and its continuation rows.
+也可执行：
 
-Produce the required implementation_spec and QA artifacts using the supplied SPEC_SCHEMA.
+```powershell
+Test-Path final/validation_master_enriched.json
+```
 
-重要： Claude 不能仅凭文件路径读取你电脑中的 Markdown。仍然需要将合并后的内容作为 Pasted Text 提供给该 Session。
+`True` 表示文件存在，但并不等于全部 92 条 Validation 都完成。尚未分析的 Record 可以不含 `implementation_spec`；这是**增量处理**的预期行为。
 
-另外，现有 `single_validation.py prepare` 默认已经包含四份完整 Markdown。如果改用统一的 `ASAP_KNOWLEDGE_CONTEXT.md`，就不要再同时粘贴它自动生成的四份 Manual 内容，否则会造成大量重复 Token 消耗。可以从 Context Pack 中只取 `VALIDATION_RECORD`、`ROW_REGISTRY` 和 `SPEC_SCHEMA` 三个 Source Blocks，再单独提供合并后的 Knowledge Context。
+## 5. 其他 Manual Modes / Token 管理
 
-## 六、需要注意的 Token 限制
+### Shared mode（默认，推荐）
 
-合并文件只解决统一组织和引用问题，不会减少原始四份 Markdown 的 Token 数量。
+```powershell
+py tools/single_validation.py prepare --id 20
+```
 
-如果合并后的文件明显接近 Claude 的 1M Context 限制，后续更适合进一步建立按标题分段的 Markdown Index，让每条 Validation 只加载相关章节。
+生成小型 Record Context；Claude 中再 Paste 一份 Shared Knowledge。
 
-我的建议：先用这段脚本生成统一 Context。 它不会修改原始四份 Markdown，文档更新后重新运行即可；后续可以在此基础上增加自动章节索引和检索功能，不需要推翻目前的 Single Validation 工作流。
+### Shared mode + Embed（只粘贴一份 Context）
+
+```powershell
+py tools/single_validation.py prepare --id 20 --embed-shared
+```
+
+Record Context 中已包含 Shared 全文；Claude 中不必再粘贴 Shared。
+
+### Full mode（旧模式）
+
+```powershell
+py tools/single_validation.py prepare --id 20 --manual-mode full
+```
+
+从 `source/` 直接读取四份独立 Markdown，并包含在每条 Record Context 中，不依赖 Shared 文件。
+
+### Selected mode（只提供相关章节）
+
+先在本地创建实际存在的片段文件，例如 `source/chunks/SM_interest.md`，再运行：
+
+```powershell
+py tools/single_validation.py prepare --id 20 --manual-mode selected `
+  --include ASAP_SCRIPTING_MANUAL:source/chunks/SM_interest.md `
+  --include ASAP_USER_MANUAL:source/chunks/UM_bond.md
+```
+
+所列片段必须确实存在。Claude 只能基于当前实际粘贴的章节得出技术结论；未提供来源的能力标为未解决。
+
+## 6. 常见问题 / Troubleshooting
+
+| 问题 | 原因 / 处理 |
+|---|---|
+| `unrecognized arguments: --embed-shared` | 正在使用旧版 `single_validation.py`；替换为支持 shared 的新版。 |
+| `invalid choice: 'shared'` | 同样说明旧脚本尚未更新。 |
+| `Shared Context not found` | 运行 `py tools/build_asap_context.py`，确认文件在 `context_packs/shared/`。 |
+| `Missing or duplicated source` | Shared 文件缺少四个 SOURCE_ID 之一，或将相同 Source Block 重复合并。 |
+| `Source fingerprint mismatch` | 原始 Flat JSON 与 Row Registry 不一致；检查文件版本，不要改 Hash 绕过验证。 |
+| `Patch fingerprint mismatch` | Claude 输出 Hash 和 Registry 不符；从对应 Registry 条目核实并纠正 Patch。 |
+| `Patch row coverage mismatch` | 缺少目标主行或 Continuation，或含无关 Row Key。 |
+| `Invalid JSONL` | 复制了 Markdown 代码围栏、漏掉对象边界、用 JSON Array 代替 JSONL 等。 |
+| `already enriched` | 此 Record 已 Merge；如确实需要替换，使用 `--replace`。 |
+| `Original data changed` | `final/` 中已有文件与原始 Flat JSON 不一致；检查是否手动改动了业务字段或 `development_status`。 |
+| `validate` 通过但没有 final JSON | `validate` 不创建最终文件；继续运行 `merge`。 |
+| Claude Context 超出限制 | 不要同时提供 Full/Shared 两份；用 `selected` 只提供经过定位的章节。 |
+
+## 7. 最短日常命令 / Quick Reference
+
+首次初始化：
+
+```powershell
+py tools/build_registry.py
+py tools/build_asap_context.py
+```
+
+每一条 Validation：
+
+```powershell
+py tools/single_validation.py prepare --id 20
+# Claude: HEADER → CONTEXT → SHARED → EXECUTE
+# Save: patches/by_record/SPEC_R020.jsonl and qa/by_record/QA_R020.json
+py tools/single_validation.py validate --id 20
+py tools/single_validation.py merge --id 20
+```
+
+重新分析同一条：
+
+```powershell
+py tools/single_validation.py merge --id 20 --replace
+```
+
+**最终原则：** 一条 Validation、一轮 Claude、一个 JSONL Patch、一次本地校验、一次增量 Merge。继续保留原始数据和明确来源证据。
