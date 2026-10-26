@@ -1,359 +1,144 @@
-Task: Enrich Validation Master JSON with ASAP Runtime-Based Implementation Specifications
+可以。建议把这四个 Markdown 按原文完整合并成一个通用的 `ASAP_KNOWLEDGE_CONTEXT.md`，并为每份文档保留独立的 `SOURCE_ID`、文件名、SHA-256 和内容边界。
 
-Objective
+这样每次新的 Claude Session 都可以使用同一个 Knowledge Context，而不必分别粘贴四份 Markdown。Claude 也能够明确区分哪些信息来自 Scripting Manual、User Manual、Release Notes 或 SQL Schema。
 
-I have provided:
+## 一、推荐输出结构
 
-1. validation_master_flat.json — the existing Validation Master dataset.
-2. ASAP User Manual — business and application documentation.
-3. ASAP Scripting Manual — scripting, object model, and Runtime documentation.
+```
+ASAP-Validation-Enrichment/
+│
+├── source/
+│   ├── validation_master_flat.json
+│   ├── merged_scripting_manual.md
+│   ├── merged_user_manual.md
+│   ├── Releases-be4181818e.md
+│   └── schema_catalog.md
+│
+├── tools/
+│   ├── single_validation.py
+│   └── build_asap_context.py        ← 新建
+│
+└── context_packs/
+    └── shared/
+        └── ASAP_KNOWLEDGE_CONTEXT.md  ← 自动生成
+```
 
-Your task is to systematically analyze every validation rule in the JSON, identify its required data points and executable validation logic, and enrich the existing JSON with detailed, implementation-ready specifications grounded in the ASAP manuals.
+## 二、完整 Python 代码
 
-The goal is to create a reusable technical specification that can later support implementing each validation function in the ASAP2 Runtime environment.
+在 `tools/` 下新建 `build_asap_context.py`，粘贴：
 
-This is a specification-enrichment task, not a request to implement the validation functions themselves.
+```
+from pathlib import Pathfrom hashlib import sha256# Project rootROOT = Path(__file__).resolve().parents[1]SOURCE_DIR = ROOT / "source"OUTPUT_FILE = (    ROOT    / "context_packs"    / "shared"    / "ASAP_KNOWLEDGE_CONTEXT.md")# Source documents and stable identifiersSOURCES = [    (        "ASAP_SCRIPTING_MANUAL",        "SM-FULL",        "merged_scripting_manual.md",    ),    (        "ASAP_USER_MANUAL",        "UM-FULL",        "merged_user_manual.md",    ),    (        "ASAP_RELEASE_NOTES",        "RN-FULL",        "Releases-be4181818e.md",    ),    (        "ASAP_SCHEMA_CATALOG",        "SC-FULL",
+```
 
-Use the provided manuals as the authoritative sources for ASAP Runtime behavior, supported objects, API calls, functions, and data-access methods.
+## 三、运行命令
 
-1. Preserve the Existing Dataset
+在 `ASAP-Validation-Enrichment` 根目录执行：
 
-The JSON currently contains:
+```
+py tools/build_asap_context.py
+```
 
-* 92 numbered validation records.
-* 16 unnumbered continuation records.
-* 108 total objects.
-* 22 original business columns, plus metadata and development status fields.
+程序将依次读取四份 Markdown，并显示各自大小。
 
-Preserve:
+最终输出：
 
-* All existing records and their ordering.
-* All original field names and values.
-* record_id, parent_record_id, and row_type.
-* development_status and any other existing progress metadata.
-* Existing SCRIPT NAME, WARNING, THRESHOLD, and NOTES values.
+```
+Context successfully generated.
 
-Do not restructure or summarize the existing dataset.
+Output: ...\context_packs\shared\ASAP_KNOWLEDGE_CONTEXT.md
+```
 
-Add exactly one new top-level property to each JSON object:
+直接在 VS Code 中打开：
 
-implementation_spec
+```
+code context_packs/shared/ASAP_KNOWLEDGE_CONTEXT.md
+```
 
-This property should contain the structured implementation analysis described below.
+## 四、生成的 Markdown 长什么样？
 
-The output must remain a top-level JSON array, with one object per original record.
+ASAP_KNOWLEDGE_CONTEXT.md
 
-2. Required Implementation Specification
 
-For each validation record, populate the following structured information.
 
-A. Identification and Execution Context
+# ASAP KNOWLEDGE CONTEXT
 
-Identify:
 
-* spec_status: documented, partially_documented, or unresolved.
-* execution_stage: setup, periodic, payment, or unknown.
-* evaluation_scope: deal, pool, bond, class, asset, loan, or another scope explicitly established by the documentation.
-* runtime_context: the required ASAP Runtime environment or objects.
-* prerequisites: conditions that must be satisfied before execution.
 
-Distinguish the stage in which the validation should run from the stage in which its inputs originate.
+来源说明、文档用途、Source Index
 
-Do not assume that a data point available during Setup is automatically available during a Periodic execution.
 
-B. Required Data Points
 
-Create required_data_points, an array containing every input necessary to implement the validation.
+# SOURCE: ASAP_SCRIPTING_MANUAL
 
-For each data point, include:
 
-* business_name: human-readable business meaning.
-* asap_field_name: exact ASAP field/parameter name, when documented.
-* asap_runtime_symbol: exact documented Runtime object, property, or function.
-* access_expression: exact Runtime access expression, if supported by the manuals.
-* data_type: numeric, string, date, Boolean, collection, or unknown.
-* entity_scope: deal, bond, loan, asset, etc.
-* period: setup, current, previous, historical, or not applicable.
-* data_origin: runtime, setup parameter, periodic input, derived calculation, external input, or unknown.
-* required: whether the validation requires this data point.
-* dependencies: other inputs needed to derive the value.
-* source_references: relevant manual citations.
-* availability_status: documented, inferred, or unresolved.
 
-Separate directly available Runtime data from values that must be calculated.
+原始 Scripting Manual 全文、文件名、SHA-256
 
-For calculated values, explicitly identify all underlying data dependencies.
 
-Do not invent Runtime symbols or assume Python attribute names based on business labels.
 
-C. Runtime Data Acquisition
+# SOURCE: ASAP_USER_MANUAL
 
-Create runtime_access_plan explaining:
 
-1. Which Runtime objects or contexts are required.
-2. How each data point is retrieved.
-3. Whether collection iteration is required.
-4. How Setup and Periodic information are accessed.
-5. How prior-period information is retrieved when necessary.
-6. Whether any additional parameters must be supplied by the host application.
-7. Whether data access is supported by documented Runtime APIs.
 
-Use documented method signatures and access patterns where available.
+原始 User Manual 全文
 
-If a required operation is not documented, leave its access expression as null and describe the unresolved dependency.
 
-Do not invent helper functions, APIs, or object methods and present them as existing ASAP capabilities.
 
-D. Calculation Dependencies
+# SOURCE: ASAP_RELEASE_NOTES
 
-Create calculation_plan containing an ordered sequence of calculation steps.
 
-Each step should specify:
 
-* step_id
-* operation
-* input_data_points
-* expression
-* output
-* execution_scope
-* source_references
+Release Notes 全文
 
-Determine which intermediate values must be calculated before evaluating the validation.
 
-Where multiple calculations share common dependencies, identify reusable intermediate results.
 
-Identify recursive or circular dependencies rather than silently resolving them.
+# SOURCE: ASAP_SCHEMA_CATALOG
 
-Favor efficient calculation design and reuse of existing Runtime values.
 
-E. Validation Logic
 
-Create validation_logic, containing one or more explicit conditions.
+SQL Schema Catalog 全文
 
-Each condition must include:
+Claude 可以通过这些明确的 `SOURCE_ID` 来引用不同文档的证据，而不是只看到一份无法区分来源的长文本。
 
-* condition_id
-* business_rule
-* input_references
-* comparison_operator
-* logical_expression
-* evaluation_granularity
-* pass_condition
-* fail_condition
-* failure_message
-* comparison_tolerance
-* missing_data_behavior
-* source_references
+## 五、Claude Session 中如何引用这个文件？
 
-Translate each original WARNING condition into a precise, logically equivalent expression.
+在 Claude 开始分析 Validation #2 时，提供两个主要 Context：
 
-Preserve the original failure message, including spelling and wording, in a dedicated field.
+第一个： 当前 Validation 的数据、Row Registry 和 Spec Schema。
 
-Do not silently change business rules.
+第二个： `ASAP_KNOWLEDGE_CONTEXT.md` 全文。
 
-For numeric comparisons, do not invent tolerances, rounding rules, or precision requirements.
+然后在执行 Prompt 中加入以下固定指令：
 
-If tolerance is not specified by the source material, use null and record an unresolved question.
+## Shared ASAP Knowledge Context
 
-Keep the existing THRESHOLD field unchanged. Do not assume that its numeric value represents a comparison tolerance, severity, or monetary threshold unless the source documentation establishes that meaning.
+The pasted document identified as `ASAP_KNOWLEDGE_CONTEXT` contains four original ASAP reference sources, each separated by explicit SOURCE_ID and CONTENT boundaries.
 
-F. Validation Dependencies and Execution Requirements
+Use these sources for all ASAP-specific technical research in this session.
 
-Create:
+When identifying Runtime APIs, field mappings, calculation dependencies, and validation logic:
 
-* runtime_dependencies
-* setup_dependencies
-* periodic_dependencies
-* previous_period_dependencies
-* external_parameters
+- Cite the original SOURCE_ID and relevant section heading.
+- Treat ASAP_SCRIPTING_MANUAL as the primary authority for Runtime API access.
+- Use ASAP_USER_MANUAL for business semantics and application behavior.
+- Use ASAP_RELEASE_NOTES to evaluate version-specific changes.
+- Use ASAP_SCHEMA_CATALOG only as database metadata, not proof of Runtime API access.
+- Do not invent undocumented Runtime symbols, fields, methods, or access expressions.
+- Preserve unresolved technical mappings as null.
 
-Identify which parameters are:
+Analyze only the specified Validation Record and its continuation rows.
 
-1. Available directly from ASAP Runtime.
-2. Configured during Deal Setup.
-3. Supplied during a Periodic run.
-4. Derived from other calculations.
-5. Missing or requiring clarification.
+Produce the required implementation_spec and QA artifacts using the supplied SPEC_SCHEMA.
 
-Do not default missing numeric inputs to zero.
+重要： Claude 不能仅凭文件路径读取你电脑中的 Markdown。仍然需要将合并后的内容作为 Pasted Text 提供给该 Session。
 
-Preserve unknown values as null.
+另外，现有 `single_validation.py prepare` 默认已经包含四份完整 Markdown。如果改用统一的 `ASAP_KNOWLEDGE_CONTEXT.md`，就不要再同时粘贴它自动生成的四份 Manual 内容，否则会造成大量重复 Token 消耗。可以从 Context Pack 中只取 `VALIDATION_RECORD`、`ROW_REGISTRY` 和 `SPEC_SCHEMA` 三个 Source Blocks，再单独提供合并后的 Knowledge Context。
 
-Where applicable, identify prerequisite validation or calculation stages.
+## 六、需要注意的 Token 限制
 
-G. Source References and Unresolved Items
+合并文件只解决统一组织和引用问题，不会减少原始四份 Markdown 的 Token 数量。
 
-Every important Runtime claim must be supported by a source reference.
+如果合并后的文件明显接近 Claude 的 1M Context 限制，后续更适合进一步建立按标题分段的 Markdown Index，让每条 Validation 只加载相关章节。
 
-Use:
-
-* Manual filename.
-* Relevant chapter/section.
-* Page number if available.
-* A short identifying excerpt or heading.
-* The specific claim supported by that reference.
-
-Do not fabricate section numbers, page numbers, or citations.
-
-If the provided context lacks reliable location information, identify the manual and distinctive heading or text instead.
-
-Create:
-
-* source_references
-* assumptions
-* unresolved_questions
-* implementation_notes
-
-Clearly distinguish:
-
-* Explicit rules from the Validation Master.
-* Documented ASAP Runtime capabilities.
-* Technical inferences.
-* Unresolved implementation decisions.
-
-Manual documentation governs Runtime availability and behavior. The existing Validation Master governs the intended business validation.
-
-If they conflict, flag the conflict rather than silently changing either source.
-
-3. Special Handling of Continuation Rows
-
-Unnumbered continuation rows may contain additional independent validation conditions.
-
-Do not discard or merge them.
-
-For each continuation row:
-
-* Preserve its parent_record_id.
-* Analyze its own WARNING, THRESHOLD, and other populated fields.
-* Create its own implementation_spec.
-* Identify shared dependencies with the parent validation.
-* Avoid duplicating Runtime data acquisition unnecessarily.
-
-For example:
-
-* Record #20 contains multiple interest-payment validation conditions.
-* Record #35 has a continuation row containing a separately named validation script: SetupValidationStateCode.
-
-A separately named continuation rule must retain its own identity.
-
-Where a main record and its continuation share implementation logic, indicate their relationship without altering the original row structure.
-
-4. ASAP Runtime Accuracy Requirements
-
-Prioritize correctness over completeness.
-
-Do not use generic financial knowledge to invent ASAP implementation details.
-
-Specifically:
-
-* Do not guess Runtime object names.
-* Do not fabricate field names.
-* Do not invent function signatures.
-* Do not assume that a value in a report corresponds directly to a Runtime-accessible field.
-* Do not assume prior-period data is accessible without documentation.
-* Do not confuse setup configuration with periodic runtime inputs.
-* Do not infer business formulas solely from similar validation names.
-
-For ambiguous rules, explain which details are missing.
-
-Examples requiring special care:
-
-* Bond and asset balance rollovers.
-* Net rate and servicing fee calculations.
-* Interest and principal payments.
-* Deferred interest.
-* Fee calculation versus reported amount.
-* Interest Reserve Account.
-* Percentage totals and tolerances.
-
-For a rule with insufficient definition, such as a validation whose description explicitly requests further explanation, mark the specification as unresolved or partially_documented.
-
-Do not manufacture a complete algorithm to make the dataset appear fully documented.
-
-5. Development Architecture
-
-The specifications should be compatible with an eventual shared ASAP2 Validation Function Library.
-
-Favor:
-
-* Reusable data acquisition patterns.
-* Reusable calculation helpers.
-* Explicit dependencies.
-* Clear validation conditions.
-* Consistent error handling.
-* Separation of business rules from Runtime data access.
-* Separation of Setup validation and Periodic validation execution.
-
-Deal-specific Setup parameters should remain identifiable as deal-level configuration rather than being unnecessarily bound to global function parameters.
-
-Keep the specifications compatible with calculation-driven development: focus on the calculations and Runtime dependencies necessary for correct implementation, without exhaustive runtime evidence verification or unrelated implementation work.
-
-Do not change existing development statuses based on your analysis.
-
-6. Processing Strategy
-
-Process the entire dataset in manageable batches, approximately 10–15 numbered records at a time, including all associated continuation rows.
-
-For each batch:
-
-1. Read the validation requirements from JSON.
-2. Identify relevant manual sections.
-3. Extract documented Runtime data-access information.
-4. Construct required data-point specifications.
-5. Derive the validation calculation and comparison logic.
-6. Record unresolved dependencies.
-7. Add implementation_spec to each record.
-8. Validate the enriched records.
-9. Save the batch results before proceeding.
-
-Reuse previously established, cited Runtime access patterns where applicable.
-
-Do not repeat the same manual analysis unnecessarily.
-
-Do not stop after a sample or the first batch unless execution is actually blocked.
-
-Complete all 108 objects.
-
-7. Required Output Files
-
-Create:
-
-validation_master_enriched.json
-
-The complete original dataset with the new implementation_spec field.
-
-validation_enrichment_report.json
-
-A quality report containing:
-
-* Total analyzed records.
-* Records with fully documented specifications.
-* Partially documented specifications.
-* Unresolved specifications.
-* Missing Runtime API mappings.
-* Missing formulas or required parameters.
-* Source coverage.
-* Original JSON versus enriched JSON integrity checks.
-
-Retain the original input JSON unchanged.
-
-If the environment cannot directly create a downloadable JSON file, provide a deterministic script and complete structured output that can create the file locally. Do not claim that a file was created unless it actually exists.
-
-8. Validation Requirements
-
-Before finalizing:
-
-1. Confirm all 108 original objects are present.
-2. Confirm original record ordering is unchanged.
-3. Confirm every original field and value is unchanged.
-4. Confirm all original development_status values are preserved.
-5. Confirm each object contains implementation_spec.
-6. Confirm each required data point has an identifiable role and provenance.
-7. Confirm all undocumented Runtime symbols remain null.
-8. Confirm no business formulas, parameters, or API calls were invented.
-9. Confirm the enriched JSON is valid and can be read back successfully.
-10. Report incomplete and unresolved specifications explicitly.
-
-Finally, provide the actual enriched JSON file and a concise summary of implementation readiness.
-
-Success means a complete, traceable, Runtime-grounded technical specification for every validation rule—not merely a description of what each validation does.
+我的建议：先用这段脚本生成统一 Context。 它不会修改原始四份 Markdown，文档更新后重新运行即可；后续可以在此基础上增加自动章节索引和检索功能，不需要推翻目前的 Single Validation 工作流。
