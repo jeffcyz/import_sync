@@ -1,16 +1,21 @@
 #!/usr/bin/env python3
-"""Import Claude's out_1.jsonl and out_2.json for a numbered validation.
+"""Import a pair of Claude artifacts using automatic naming detection.
 
-Uses the project's single_validation.py to validate the cleaned JSONL patch.
-The LAST NON-EMPTY TEXT LINE is always removed from EACH incoming file.
-On parse/validation failure, no destination files are published and the
-original files remain in Downloads.
+Supported pairs in Downloads:
+  - out_1.jsonl + out_2.json
+  - SPEC_R006.jsonl + QA_R006.json (for --id 6)
+
+Always remove the LAST NON-EMPTY TEXT LINE from EACH input (including the
+already named files). Validate both cleaned files and then copy to the
+canonical project destinations. On any failure, retain the original inputs.
+If both pairs exist, require an explicit --source-mode to avoid stale imports.
 
 Usage:
-  py tools/import_claude_artifacts.py --id 3
-  py tools/import_claude_artifacts.py --id 3 --downloads "H:\\My Downloads"
-  py tools/import_claude_artifacts.py --id 3 --keep-downloads
-  py tools/import_claude_artifacts.py --id 3 --replace
+  py tools/import_claude_artifacts.py --id 6
+  py tools/import_claude_artifacts.py --id 6 --source-mode named
+  py tools/import_claude_artifacts.py --id 6 --source-mode generic
+  py tools/import_claude_artifacts.py --id 6 --keep-downloads
+  py tools/import_claude_artifacts.py --id 6 --replace
 """
 from __future__ import annotations
 
@@ -72,16 +77,58 @@ def check_qa(text: str, rid: int) -> None:
         obj = json.loads(text)
     except json.JSONDecodeError as exc:
         raise ValueError(
-            "out_2.json is not valid JSON AFTER forced last-line removal; "
+            "QA input is not valid JSON AFTER forced last-line removal; "
             "it may have ended with an essential closing brace. "
             "No files changed. " + str(exc)
         ) from exc
     if not isinstance(obj, dict):
-        raise ValueError("out_2.json must be a JSON object")
+        raise ValueError("QA input must be a JSON object")
     if "target_record_id" in obj and int(obj["target_record_id"]) != rid:
         raise ValueError(f"QA target_record_id does not match --id {rid}")
     if "expected_row_keys" in obj and f"R{rid:03d}" not in obj["expected_row_keys"]:
         raise ValueError(f"QA expected_row_keys does not include R{rid:03d}")
+
+
+def discover_download_pair(downloads: Path, rid: int, source_mode: str) -> tuple[Path, Path, str]:
+    """Choose a complete pair, never combine one stale file with another pair."""
+    pairs = {
+        "named": (
+            downloads / f"SPEC_R{rid:03d}.jsonl",
+            downloads / f"QA_R{rid:03d}.json",
+        ),
+        "generic": (downloads / "out_1.jsonl", downloads / "out_2.json"),
+    }
+
+    if not downloads.is_dir():
+        raise FileNotFoundError(f"Downloads folder does not exist: {downloads}")
+
+    if source_mode != "auto":
+        patch, qa = pairs[source_mode]
+        missing = [str(p) for p in (patch, qa) if not p.is_file()]
+        if missing:
+            raise FileNotFoundError(
+                f"Missing {source_mode} artifact(s): {', '.join(missing)}"
+            )
+        return patch, qa, source_mode
+
+    complete = [
+        mode for mode, files in pairs.items()
+        if all(p.is_file() for p in files)
+    ]
+    if len(complete) == 1:
+        mode = complete[0]
+        return *pairs[mode], mode
+    if len(complete) > 1:
+        raise ValueError(
+            "Both named and generic artifact pairs are present in Downloads. "
+            "Use --source-mode named or --source-mode generic to select explicitly."
+        )
+
+    found = {mode: [p.name for p in files if p.is_file()] for mode, files in pairs.items()}
+    raise FileNotFoundError(
+        f"No complete artifact pair for record {rid}. Found: {found}. "
+        "Expected matching pair of named or generic files; do not mix formats."
+    )
 
 
 def atomic_write(path: Path, data: str) -> None:
@@ -101,6 +148,10 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--id", type=int, required=True, help="Numbered validation ID, e.g. 3")
     parser.add_argument("--downloads", type=Path, default=Path.home() / "Downloads")
+    parser.add_argument(
+        "--source-mode", choices=("auto", "named", "generic"), default="auto",
+        help="Auto-detect pair, or explicitly choose when Downloads has both kinds",
+    )
     parser.add_argument("--keep-downloads", action="store_true", help="Preserve input downloads after import")
     parser.add_argument("--replace", action="store_true", help="Back up and replace existing destination artifacts")
     parser.add_argument("--skip-project-validation", action="store_true",
@@ -109,14 +160,21 @@ def main() -> None:
     if args.id <= 0:
         parser.error("--id must be positive")
 
-    incoming_patch = args.downloads / "out_1.jsonl"
-    incoming_qa = args.downloads / "out_2.json"
-    if not incoming_patch.is_file() or not incoming_qa.is_file():
-        missing = [str(p) for p in (incoming_patch, incoming_qa) if not p.is_file()]
-        raise FileNotFoundError("Downloads artifacts missing: " + ", ".join(missing))
+    incoming_patch, incoming_qa, detected_mode = discover_download_pair(
+        args.downloads, args.id, args.source_mode
+    )
+    print(f"Detected Claude download naming: {detected_mode}")
+    print(f"Input patch: {incoming_patch}")
+    print(f"Input QA:    {incoming_qa}")
 
     dest_patch = ROOT / "patches" / "by_record" / f"SPEC_R{args.id:03d}.jsonl"
     dest_qa = ROOT / "qa" / "by_record" / f"QA_R{args.id:03d}.json"
+    for incoming, dest in ((incoming_patch, dest_patch), (incoming_qa, dest_qa)):
+        if incoming.resolve() == dest.resolve():
+            raise ValueError(
+                f"Input is already at destination ({dest}); do not trim in-place. "
+                "Place fresh Claude downloads in Downloads first."
+            )
     for p in (dest_patch, dest_qa):
         if p.exists() and not args.replace:
             raise FileExistsError(f"Destination exists: {p}. Use --replace to create a backup and overwrite.")
