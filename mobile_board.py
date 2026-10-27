@@ -1,968 +1,180 @@
-
 #!/usr/bin/env python3
+"""Import Claude's out_1.jsonl and out_2.json for a numbered validation.
+
+Uses the project's single_validation.py to validate the cleaned JSONL patch.
+The LAST NON-EMPTY TEXT LINE is always removed from EACH incoming file.
+On parse/validation failure, no destination files are published and the
+original files remain in Downloads.
+
+Usage:
+  py tools/import_claude_artifacts.py --id 3
+  py tools/import_claude_artifacts.py --id 3 --downloads "H:\\My Downloads"
+  py tools/import_claude_artifacts.py --id 3 --keep-downloads
+  py tools/import_claude_artifacts.py --id 3 --replace
 """
-ASAP Validation Enrichment — Single Validation Tool
-
-Commands:
-    prepare  --id N
-    validate --id N
-    merge    --id N
-
-Manual modes:
-    shared   (default)
-    full
-    selected
-
-The tool preserves the original Validation Master JSON.
-It updates only implementation_spec in the merged output.
-"""
+from __future__ import annotations
 
 import argparse
-import hashlib
 import json
-import re
+import os
 import shutil
-
+import subprocess
+import sys
+import tempfile
 from datetime import datetime
 from pathlib import Path
 
-
-# ============================================================
-# Paths and configuration
-# ============================================================
-
 ROOT = Path(__file__).resolve().parents[1]
 
-DEFAULT_SOURCE = ROOT / "source" / "validation_master_flat.json"
 
-DEFAULT_REGISTRY = ROOT / "control" / "ROW_REGISTRY.jsonl"
+def trim_final_nonempty_line(path: Path) -> tuple[str, str]:
+    """Remove exactly one last nonblank logical line, plus any trailing blank lines.
 
-DEFAULT_SCHEMA = ROOT / "control" / "SPEC_SCHEMA.json"
-
-SHARED_CONTEXT = (
-    ROOT
-    / "context_packs"
-    / "shared"
-    / "ASAP_KNOWLEDGE_CONTEXT.md"
-)
-
-CONTEXT_DIR = ROOT / "context_packs" / "by_record"
-
-PATCH_DIR = ROOT / "patches" / "by_record"
-
-DEFAULT_OUTPUT = (
-    ROOT
-    / "final"
-    / "validation_master_enriched.json"
-)
-
-MANUALS = {
-    "ASAP_SCRIPTING_MANUAL": "merged_scripting_manual.md",
-    "ASAP_USER_MANUAL": "merged_user_manual.md",
-    "ASAP_RELEASE_NOTES": "Releases-be4181818e.md",
-    "ASAP_SCHEMA_CATALOG": "schema_catalog.md",
-}
+    Unicode BOM is tolerated on read. The caller validates the result before
+    modifying any original or published file.
+    """
+    text = path.read_text(encoding="utf-8-sig")
+    lines = text.splitlines(keepends=True)
+    while lines and not lines[-1].strip():
+        lines.pop()
+    if len(lines) < 2:
+        raise ValueError(
+            f"{path.name}: fewer than two nontrivial physical lines; "
+            "forced last-line deletion would erase the entire artifact. "
+            "No files changed."
+        )
+    removed = lines.pop()
+    cleaned = "".join(lines).rstrip("\r\n") + "\n"
+    if not cleaned.strip():
+        raise ValueError(f"{path.name}: no content remains after deleting last line")
+    return cleaned, removed
 
 
-# ============================================================
-# File utilities
-# ============================================================
-
-def read_text(path):
-    return Path(path).read_text(encoding="utf-8-sig")
-
-
-def read_json(path):
-    return json.loads(read_text(path))
-
-
-def read_jsonl(path):
+def read_jsonl_text(text: str, filename: str) -> list[dict]:
     records = []
-
-    for line_number, line in enumerate(
-        read_text(path).splitlines(),
-        start=1,
-    ):
+    for n, line in enumerate(text.splitlines(), 1):
         if not line.strip():
             continue
-
         try:
             item = json.loads(line)
         except json.JSONDecodeError as exc:
-            raise ValueError(
-                f"Invalid JSONL at {path}, "
-                f"line {line_number}: {exc}"
-            ) from exc
-
+            raise ValueError(f"{filename}: cleaned JSONL line {n} invalid: {exc}") from exc
         if not isinstance(item, dict):
-            raise ValueError(
-                f"Expected JSON object at "
-                f"{path}:{line_number}"
-            )
-
+            raise ValueError(f"{filename}: JSONL line {n} must be an object")
         records.append(item)
-
+    if not records:
+        raise ValueError(f"{filename}: cleaned JSONL has no records")
     return records
 
 
-def write_text(path, content):
-    path = Path(path)
-
-    path.parent.mkdir(
-        parents=True,
-        exist_ok=True,
-    )
-
-    # Avoid Windows newline conversion.
-    path.write_bytes(content.encode("utf-8"))
-
-
-def write_json(path, data):
-    content = json.dumps(
-        data,
-        ensure_ascii=False,
-        indent=2,
-        allow_nan=False,
-    ) + "\n"
-
-    write_text(path, content)
-
-    if read_json(path) != data:
+def check_qa(text: str, rid: int) -> None:
+    try:
+        obj = json.loads(text)
+    except json.JSONDecodeError as exc:
         raise ValueError(
-            f"JSON round-trip verification failed: {path}"
-        )
-
-
-def source_fingerprint(record):
-    serialized = json.dumps(
-        record,
-        ensure_ascii=False,
-        sort_keys=True,
-        separators=(",", ":"),
-    )
-
-    return hashlib.sha256(
-        serialized.encode("utf-8")
-    ).hexdigest()
-
-
-def normalize_id(value):
-    if value is None:
-        return None
-
-    if isinstance(value, bool):
-        raise ValueError("Boolean record ID is invalid")
-
-    number = float(value)
-
-    if not number.is_integer():
-        raise ValueError(f"Invalid record ID: {value}")
-
-    return int(number)
-
-
-# ============================================================
-# Source registry
-# ============================================================
-
-def load_source_registry(source_path, registry_path):
-    source_records = read_json(source_path)
-    registry_records = read_jsonl(registry_path)
-
-    if not isinstance(source_records, list):
-        raise ValueError(
-            "Validation Master must be a JSON array"
-        )
-
-    if len(source_records) != len(registry_records):
-        raise ValueError(
-            "Source and registry row counts differ"
-        )
-
-    index = {}
-    continuation_counts = {}
-
-    for position, (record, registry) in enumerate(
-        zip(source_records, registry_records)
-    ):
-        record_id = normalize_id(
-            record.get("record_id")
-        )
-
-        if record_id is not None:
-            row_key = f"R{record_id:03d}"
-
-        else:
-            parent_id = normalize_id(
-                record.get("parent_record_id")
-            )
-
-            if parent_id is None:
-                raise ValueError(
-                    f"Continuation at index {position} "
-                    "has no parent_record_id"
-                )
-
-            continuation_counts[parent_id] = (
-                continuation_counts.get(parent_id, 0) + 1
-            )
-
-            row_key = (
-                f"C{parent_id:03d}-"
-                f"{continuation_counts[parent_id]:02d}"
-            )
-
-        fingerprint = source_fingerprint(record)
-
-        if registry.get("row_key") != row_key:
-            raise ValueError(
-                f"Row key mismatch: {row_key}"
-            )
-
-        if registry.get("source_index") != position:
-            raise ValueError(
-                f"Source index mismatch: {row_key}"
-            )
-
-        if registry.get("source_row_sha256") != fingerprint:
-            raise ValueError(
-                f"Source fingerprint mismatch: {row_key}"
-            )
-
-        if row_key in index:
-            raise ValueError(
-                f"Duplicate row key: {row_key}"
-            )
-
-        index[row_key] = {
-            "position": position,
-            "record": record,
-            "fingerprint": fingerprint,
-        }
-
-    return source_records, index
-
-
-def get_target_keys(index, record_id):
-    main_key = f"R{record_id:03d}"
-
-    if main_key not in index:
-        raise ValueError(
-            f"Record ID {record_id} not found"
-        )
-
-    keys = []
-
-    for key, entry in index.items():
-        record = entry["record"]
-
-        rid = normalize_id(record.get("record_id"))
-        parent = normalize_id(
-            record.get("parent_record_id")
-        )
-
-        if rid == record_id:
-            keys.append(key)
-
-        elif rid is None and parent == record_id:
-            keys.append(key)
-
-    return keys
-
-
-# ============================================================
-# Source block generator
-# ============================================================
-
-def make_source_block(
-    source_id,
-    chunk_id,
-    content,
-    scope="FULL_DOCUMENT",
-):
-    return (
-        "===== BEGIN SOURCE =====\n"
-        f"SOURCE_ID: {source_id}\n"
-        f"CHUNK_ID: {chunk_id}\n"
-        f"SOURCE_SCOPE: {scope}\n"
-        "CONTENT_START\n"
-        f"{content.rstrip()}\n"
-        "CONTENT_END\n"
-        "===== END SOURCE =====\n"
-    )
-
-
-# ============================================================
-# Shared Knowledge Context
-# ============================================================
-
-def validate_shared_context():
-    if not SHARED_CONTEXT.is_file():
-        raise FileNotFoundError(
-            f"Shared Context not found:\n"
-            f"{SHARED_CONTEXT}\n\n"
-            "Run:\n"
-            "py tools/build_asap_context.py"
-        )
-
-    content = read_text(SHARED_CONTEXT)
-
-    for source_id in MANUALS:
-        pattern = (
-            rf"(?m)^SOURCE_ID:\s*"
-            rf"{re.escape(source_id)}\s*$"
-        )
-
-        matches = re.findall(pattern, content)
-
-        if len(matches) != 1:
-            raise ValueError(
-                f"Expected exactly one source block for "
-                f"{source_id}, found {len(matches)}"
-            )
-
-    if content.count("===== BEGIN SOURCE =====") != 4:
-        raise ValueError(
-            "Shared Context must contain four source blocks"
-        )
-
-    if content.count("===== END SOURCE =====") != 4:
-        raise ValueError(
-            "Shared Context source boundaries are incomplete"
-        )
-
-    print(
-        f"[OK] Shared Context: "
-        f"{SHARED_CONTEXT.stat().st_size:,} bytes"
-    )
-
-    return content
-
-
-# ============================================================
-# Prepare Claude Context
-# ============================================================
-
-def prepare(args, index):
-    record_id = args.id
-
-    keys = get_target_keys(index, record_id)
-
-    target_records = [
-        index[key]["record"]
-        for key in keys
-    ]
-
-    registry_subset = [
-        {
-            "row_key": key,
-            "source_index": index[key]["position"],
-            "source_row_sha256": index[key]["fingerprint"],
-        }
-        for key in keys
-    ]
-
-    blocks = []
-
-    # Validation source
-    blocks.append(
-        make_source_block(
-            "VALIDATION_RECORD",
-            f"R{record_id:03d}",
-            json.dumps(
-                target_records,
-                ensure_ascii=False,
-                indent=2,
-            ),
-            "TARGET_AND_CONTINUATIONS",
-        )
-    )
-
-    # Registry
-    blocks.append(
-        make_source_block(
-            "ROW_REGISTRY",
-            f"R{record_id:03d}",
-            "\n".join(
-                json.dumps(item, ensure_ascii=False)
-                for item in registry_subset
-            ),
-            "TARGET_AND_CONTINUATIONS",
-        )
-    )
-
-    # Schema
-    blocks.append(
-        make_source_block(
-            "SPEC_SCHEMA",
-            "CANONICAL",
-            read_text(args.schema),
-        )
-    )
-
-    # --------------------------------------------------------
-    # Knowledge source modes
-    # --------------------------------------------------------
-
-    if args.manual_mode == "shared":
-        shared_content = validate_shared_context()
-
-        if args.embed_shared:
-            # Embed the four existing source blocks as-is.
-            # Do not wrap them in another SOURCE block.
-            blocks.append(shared_content)
-
-    elif args.manual_mode == "full":
-        for source_id, filename in MANUALS.items():
-            path = ROOT / "source" / filename
-
-            if not path.is_file():
-                raise FileNotFoundError(path)
-
-            blocks.append(
-                make_source_block(
-                    source_id,
-                    filename,
-                    read_text(path),
-                    "FULL_DOCUMENT",
-                )
-            )
-
-    elif args.manual_mode == "selected":
-        if not args.include:
-            raise ValueError(
-                "Selected mode requires --include"
-            )
-
-    # Optional selected manual chunks
-    for item in args.include:
-        source_id, separator, relative_path = (
-            item.partition(":")
-        )
-
-        if not separator or source_id not in MANUALS:
-            raise ValueError(
-                "Expected --include "
-                "SOURCE_ID:relative/path.md"
-            )
-
-        path = (ROOT / relative_path).resolve()
-
-        if ROOT not in path.parents or not path.is_file():
-            raise ValueError(
-                f"Invalid or missing source chunk: {path}"
-            )
-
-        blocks.append(
-            make_source_block(
-                source_id,
-                path.stem,
-                read_text(path),
-                "SELECTED_SECTIONS",
-            )
-        )
-
-    # --------------------------------------------------------
-    # Generate three output files
-    # --------------------------------------------------------
-
-    CONTEXT_DIR.mkdir(
-        parents=True,
-        exist_ok=True,
-    )
-
-    prefix = f"R{record_id:03d}"
-
-    header_path = (
-        CONTEXT_DIR / f"{prefix}_HEADER.txt"
-    )
-
-    context_path = (
-        CONTEXT_DIR / f"{prefix}_CONTEXT.txt"
-    )
-
-    execute_path = (
-        CONTEXT_DIR / f"{prefix}_EXECUTE.txt"
-    )
-
-    # Header, with automatic Record ID substitution
-    header_template = read_text(
-        ROOT / "prompts" / "SINGLE_VALIDATION_HEADER.md"
-    )
-
-    header = (
-        header_template
-        .replace(
-            "[REPLACE_WITH_INTEGER]",
-            str(record_id),
-        )
-        .replace(
-            "[R###]",
-            prefix,
-        )
-    )
-
-    write_text(header_path, header)
-
-    # Record context
-    write_text(
-        context_path,
-        "\n\n".join(blocks),
-    )
-
-    # Final execute prompt
-    execute_template = read_text(
-        ROOT / "prompts" / "SINGLE_VALIDATION_EXECUTE.md"
-    )
-
-    execute = (
-        f"TARGET_RECORD_ID: {record_id}\n"
-        f"TARGET_ROW_KEY: {prefix}\n\n"
-        + execute_template
-    )
-
-    write_text(execute_path, execute)
-
-    # --------------------------------------------------------
-    # Console summary
-    # --------------------------------------------------------
-
-    print()
-    print("=" * 60)
-    print(f"Prepared {prefix}: {len(keys)} source rows")
-    print("=" * 60)
-
-    print(f"Header:  {header_path}")
-    print(f"Context: {context_path}")
-    print(f"Execute: {execute_path}")
-
-    if args.manual_mode == "shared":
-        if args.embed_shared:
-            print(
-                "\nShared Knowledge was embedded "
-                "inside the Record Context."
-            )
-        else:
-            print(
-                "\nPaste Shared Knowledge separately:"
-            )
-            print(SHARED_CONTEXT)
-
-    print("\nClaude input order:")
-    print("1. HEADER")
-    print("2. CONTEXT")
-    if (
-        args.manual_mode == "shared"
-        and not args.embed_shared
-    ):
-        print("3. SHARED KNOWLEDGE")
-        print("4. EXECUTE")
-    else:
-        print("3. EXECUTE")
-
-    print()
-
-
-# ============================================================
-# Schema validation
-# ============================================================
-
-JSON_TYPES = {
-    "null": type(None),
-    "string": str,
-    "array": list,
-    "object": dict,
-    "integer": int,
-    "number": (int, float),
-    "boolean": bool,
-}
-
-
-def validate_schema(value, schema, location="$"):
-    if "enum" in schema:
-        if value not in schema["enum"]:
-            raise ValueError(
-                f"{location}: invalid enum value"
-            )
-
-    expected_type = schema.get("type")
-
-    if expected_type:
-        allowed = (
-            [expected_type]
-            if isinstance(expected_type, str)
-            else expected_type
-        )
-
-        def matches(type_name):
-            cls = JSON_TYPES[type_name]
-
-            if type_name in ("integer", "number"):
-                if isinstance(value, bool):
-                    return False
-
-            return isinstance(value, cls)
-
-        if not any(matches(t) for t in allowed):
-            raise ValueError(
-                f"{location}: wrong data type; "
-                f"expected {allowed}"
-            )
-
-    if isinstance(value, dict):
-        required = schema.get("required", [])
-
-        for field in required:
-            if field not in value:
-                raise ValueError(
-                    f"{location}: missing {field}"
-                )
-
-        properties = schema.get("properties", {})
-
-        if schema.get("additionalProperties") is False:
-            unexpected = set(value) - set(properties)
-
-            if unexpected:
-                raise ValueError(
-                    f"{location}: unexpected fields "
-                    f"{sorted(unexpected)}"
-                )
-
-        for name, item in value.items():
-            if name in properties:
-                validate_schema(
-                    item,
-                    properties[name],
-                    f"{location}.{name}",
-                )
-
-    if isinstance(value, list):
-        item_schema = schema.get("items")
-
-        if isinstance(item_schema, dict):
-            for position, item in enumerate(value):
-                validate_schema(
-                    item,
-                    item_schema,
-                    f"{location}[{position}]",
-                )
-
-
-# ============================================================
-# Validate one Claude Patch
-# ============================================================
-
-def validate_patch(record_id, index, patch_path, schema_path):
-    patches = read_jsonl(patch_path)
-
-    expected_keys = get_target_keys(
-        index,
-        record_id,
-    )
-
-    actual_keys = [
-        item.get("row_key")
-        for item in patches
-    ]
-
-    if (
-        len(actual_keys) != len(set(actual_keys))
-        or set(actual_keys) != set(expected_keys)
-    ):
-        raise ValueError(
-            "Patch row coverage mismatch.\n"
-            f"Expected: {expected_keys}\n"
-            f"Received: {actual_keys}"
-        )
-
-    schema = read_json(schema_path)
-
-    expected_fields = {
-        "row_key",
-        "source_row_sha256",
-        "implementation_spec",
-    }
-
-    for patch in patches:
-        if set(patch) != expected_fields:
-            raise ValueError(
-                f"Unexpected Patch fields: "
-                f"{patch.get('row_key')}"
-            )
-
-        row_key = patch["row_key"]
-
-        if (
-            patch["source_row_sha256"]
-            != index[row_key]["fingerprint"]
-        ):
-            raise ValueError(
-                f"Patch fingerprint mismatch: {row_key}"
-            )
-
-        validate_schema(
-            patch["implementation_spec"],
-            schema,
-            f"{row_key}.implementation_spec",
-        )
-
-    return patches
-
-
-# ============================================================
-# Incremental JSON merge
-# ============================================================
-
-def merge(args, original_records, index, patches):
-    output_path = args.output
-
-    if output_path.resolve() == args.source.resolve():
-        raise ValueError(
-            "Output cannot overwrite original source JSON"
-        )
-
-    if output_path.exists():
-        merged = read_json(output_path)
-    else:
-        merged = [
-            dict(row)
-            for row in original_records
-        ]
-
-    if (
-        not isinstance(merged, list)
-        or len(merged) != len(original_records)
-    ):
-        raise ValueError(
-            "Existing enriched JSON has invalid row count"
-        )
-
-    # Verify no original fields have been altered.
-    for position, (original, current) in enumerate(
-        zip(original_records, merged)
-    ):
-        original_fields = {
-            key: value
-            for key, value in current.items()
-            if key != "implementation_spec"
-        }
-
-        if original_fields != original:
-            raise ValueError(
-                f"Original data changed at row {position}"
-            )
-
-    # Apply ONLY target record patches.
-    changed_keys = []
-
-    for patch in patches:
-        row_key = patch["row_key"]
-
-        position = index[row_key]["position"]
-
-        if (
-            "implementation_spec" in merged[position]
-            and not args.replace
-        ):
-            raise ValueError(
-                f"{row_key} already enriched. "
-                "Use --replace to update it."
-            )
-
-        merged[position]["implementation_spec"] = (
-            patch["implementation_spec"]
-        )
-
-        changed_keys.append(row_key)
-
-    # Serialize and verify before changing output.
-    serialized = json.dumps(
-        merged,
-        ensure_ascii=False,
-        indent=2,
-        allow_nan=False,
-    ) + "\n"
-
-    if json.loads(serialized) != merged:
-        raise ValueError("JSON serialization check failed")
-
-    output_path.parent.mkdir(
-        parents=True,
-        exist_ok=True,
-    )
-
-    temp_path = output_path.with_suffix(".tmp")
-
-    write_text(temp_path, serialized)
-
-    if read_json(temp_path) != merged:
-        temp_path.unlink(missing_ok=True)
-        raise ValueError("Temporary output verification failed")
-
-    # Back up previous enriched output.
-    if output_path.exists():
-        timestamp = datetime.now().strftime(
-            "%Y%m%d_%H%M%S_%f"
-        )
-
-        backup_path = output_path.with_name(
-            f"{output_path.stem}_{timestamp}.bak.json"
-        )
-
-        shutil.copy2(
-            output_path,
-            backup_path,
-        )
-
-        print(f"Backup created: {backup_path}")
-
-    # Publish new output.
-    temp_path.replace(output_path)
-
-    print()
-    print("=" * 60)
-    print("MERGE SUCCESSFUL")
-    print("=" * 60)
-
-    print("Updated Row Keys:", ", ".join(changed_keys))
-    print("Total source rows:", len(original_records))
-    print("Output:", output_path)
-    print("Original business fields: preserved")
-    print("Development statuses: preserved")
-    print()
-
-
-# ============================================================
-# CLI
-# ============================================================
-
-def main():
-    parser = argparse.ArgumentParser(
-        description=(
-            "ASAP Single Validation Enrichment "
-            "— prepare, validate, merge"
-        )
-    )
-
-    commands = parser.add_subparsers(
-        dest="command",
-        required=True,
-    )
-
-    for command_name in (
-        "prepare",
-        "validate",
-        "merge",
-    ):
-        command = commands.add_parser(command_name)
-
-        command.add_argument(
-            "--id",
-            type=int,
-            required=True,
-            help="Numbered Validation Record ID",
-        )
-
-        command.add_argument(
-            "--source",
-            type=Path,
-            default=DEFAULT_SOURCE,
-        )
-
-        command.add_argument(
-            "--registry",
-            type=Path,
-            default=DEFAULT_REGISTRY,
-        )
-
-        command.add_argument(
-            "--schema",
-            type=Path,
-            default=DEFAULT_SCHEMA,
-        )
-
-        if command_name == "prepare":
-            command.add_argument(
-                "--manual-mode",
-                choices=("shared", "full", "selected"),
-                default="shared",
-            )
-
-            command.add_argument(
-                "--embed-shared",
-                action="store_true",
-                help=(
-                    "Embed shared Markdown inside "
-                    "the Record Context"
-                ),
-            )
-
-            command.add_argument(
-                "--include",
-                action="append",
-                default=[],
-                help="SOURCE_ID:relative/path.md",
-            )
-
-        else:
-            command.add_argument(
-                "--patch",
-                type=Path,
-                default=None,
-            )
-
-        if command_name == "merge":
-            command.add_argument(
-                "--output",
-                type=Path,
-                default=DEFAULT_OUTPUT,
-            )
-
-            command.add_argument(
-                "--replace",
-                action="store_true",
-            )
-
+            "out_2.json is not valid JSON AFTER forced last-line removal; "
+            "it may have ended with an essential closing brace. "
+            "No files changed. " + str(exc)
+        ) from exc
+    if not isinstance(obj, dict):
+        raise ValueError("out_2.json must be a JSON object")
+    if "target_record_id" in obj and int(obj["target_record_id"]) != rid:
+        raise ValueError(f"QA target_record_id does not match --id {rid}")
+    if "expected_row_keys" in obj and f"R{rid:03d}" not in obj["expected_row_keys"]:
+        raise ValueError(f"QA expected_row_keys does not include R{rid:03d}")
+
+
+def atomic_write(path: Path, data: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile(mode="wb", dir=path.parent,
+                                     prefix=path.name + ".", suffix=".tmp",
+                                     delete=False) as f:
+        tmp = Path(f.name)
+        f.write(data.encode("utf-8"))
+    try:
+        os.replace(tmp, path)
+    finally:
+        tmp.unlink(missing_ok=True)
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--id", type=int, required=True, help="Numbered validation ID, e.g. 3")
+    parser.add_argument("--downloads", type=Path, default=Path.home() / "Downloads")
+    parser.add_argument("--keep-downloads", action="store_true", help="Preserve input downloads after import")
+    parser.add_argument("--replace", action="store_true", help="Back up and replace existing destination artifacts")
+    parser.add_argument("--skip-project-validation", action="store_true",
+                        help="Only JSON syntax checks; NOT recommended for production")
     args = parser.parse_args()
+    if args.id <= 0:
+        parser.error("--id must be positive")
 
-    original_records, index = load_source_registry(
-        args.source,
-        args.registry,
-    )
+    incoming_patch = args.downloads / "out_1.jsonl"
+    incoming_qa = args.downloads / "out_2.json"
+    if not incoming_patch.is_file() or not incoming_qa.is_file():
+        missing = [str(p) for p in (incoming_patch, incoming_qa) if not p.is_file()]
+        raise FileNotFoundError("Downloads artifacts missing: " + ", ".join(missing))
 
-    if args.command == "prepare":
-        prepare(args, index)
-        return
+    dest_patch = ROOT / "patches" / "by_record" / f"SPEC_R{args.id:03d}.jsonl"
+    dest_qa = ROOT / "qa" / "by_record" / f"QA_R{args.id:03d}.json"
+    for p in (dest_patch, dest_qa):
+        if p.exists() and not args.replace:
+            raise FileExistsError(f"Destination exists: {p}. Use --replace to create a backup and overwrite.")
 
-    patch_path = (
-        args.patch
-        if args.patch is not None
-        else PATCH_DIR / f"SPEC_R{args.id:03d}.jsonl"
-    )
+    cleaned_patch, deleted_patch_line = trim_final_nonempty_line(incoming_patch)
+    cleaned_qa, deleted_qa_line = trim_final_nonempty_line(incoming_qa)
+    parsed_patch = read_jsonl_text(cleaned_patch, incoming_patch.name)
+    check_qa(cleaned_qa, args.id)
 
-    patches = validate_patch(
-        args.id,
-        index,
-        patch_path,
-        args.schema,
-    )
+    # Validate the actual cleaned patch with the existing project's schema,
+    # source fingerprint, and continuation-row coverage rules BEFORE publication.
+    if not args.skip_project_validation:
+        validator = ROOT / "tools" / "single_validation.py"
+        if not validator.exists():
+            raise FileNotFoundError(f"Missing project validator: {validator}")
+        with tempfile.TemporaryDirectory() as tmpdir:
+            temp_patch = Path(tmpdir) / "candidate.jsonl"
+            temp_patch.write_bytes(cleaned_patch.encode("utf-8"))
+            cmd = [sys.executable, str(validator), "validate", "--id",
+                   str(args.id), "--patch", str(temp_patch)]
+            print("Running Single Validation source/schema/fingerprint checks...")
+            subprocess.run(cmd, cwd=ROOT, check=True)
 
-    print()
-    print("[PASS] Patch validation")
-    print("Record ID:", args.id)
-    print("Validated source rows:", len(patches))
-    print("Row coverage: complete")
-    print("Source fingerprints: matched")
-    print("Schema basic validation: passed")
+    # Only commit after both cleaned artifacts and source registry are checked.
+    backups = {}
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+    for path in (dest_patch, dest_qa):
+        if path.exists():
+            backup = path.with_name(f"{path.stem}.{stamp}.bak{path.suffix}")
+            shutil.copy2(path, backup)
+            backups[path] = backup
 
-    if args.command == "merge":
-        merge(
-            args,
-            original_records,
-            index,
-            patches,
-        )
+    published = []
+    try:
+        atomic_write(dest_patch, cleaned_patch)
+        published.append(dest_patch)
+        atomic_write(dest_qa, cleaned_qa)
+        published.append(dest_qa)
+    except Exception:
+        for path in published:
+            if path in backups:
+                shutil.copy2(backups[path], path)
+            else:
+                path.unlink(missing_ok=True)
+        raise
+
+    # Remove Downloads files only after successful validation and publication.
+    if not args.keep_downloads:
+        incoming_patch.unlink()
+        incoming_qa.unlink()
+
+    print(f"\nSUCCESS — R{args.id:03d}: imported {len(parsed_patch)} JSONL row(s)")
+    print(f"Removed 1 last non-empty line from {incoming_patch.name} (length {len(deleted_patch_line.strip())} chars)")
+    print(f"Removed 1 last non-empty line from {incoming_qa.name} (length {len(deleted_qa_line.strip())} chars)")
+    print("Patch:", dest_patch)
+    print("QA:   ", dest_qa)
+    print("Downloads:", "kept" if args.keep_downloads else "removed after success")
+    print(f"Next: py tools/single_validation.py merge --id {args.id}")
 
 
 if __name__ == "__main__":
