@@ -1,0 +1,942 @@
+{
+  "scope": "Enrich missing implementation_spec entries only; preserve 17 pre-existing specs and every original field.",
+  "sources": {
+    "validation_master_enriched.json_sha256": "3144f7d2c5cdbdd946e1cfa501ce17839938edd607114e809f951a8c0f8095b4",
+    "ASAP_KNOWLEDGE_CONTEXT_20261025(1).md_sha256": "28e705d13d09590c94d6c18834633306100eb962cf20d41e14c6ccb788ba247b"
+  },
+  "row_counts": {
+    "total": 108,
+    "numbered": 92,
+    "continuations": 16,
+    "already_enriched_preserved": 17,
+    "new_specs_added": 91,
+    "missing_after": 0
+  },
+  "new_spec_status_counts": {
+    "partially_documented": 57,
+    "unresolved": 34
+  },
+  "readiness_all": {
+    "partial": 56,
+    "ready": 2,
+    "blocked": 50
+  },
+  "new_specs_with_unresolved_inputs": 34,
+  "caveats": [
+    "All 91 additions are evidence-grounded draft specifications, not implemented or executed ASAP validation functions.",
+    "No undocumented runtime API, independent fee calculation or business tolerance was invented; missing mappings are null.",
+    "When the rule text is underspecified (e.g. fees, CashIn, OC/UC, group membership), readiness remains blocked.",
+    "17 previously enriched implementation_spec entries are preserved exactly, even if their asserted runtime readiness may need later QA.",
+    "Validation of runtime access is based on field definitions and does not certify permission in every processing stage.",
+    "The original records and their development_status are unchanged.",
+    "Source line numbers refer to the uploaded combined Markdown and may change if the source is re-exported.",
+    "User Manual/Release Notes/SQL Catalog were not exhaustively crosschecked for every new mapping; this version focuses on verified Scripting Manual fields and the original rule text."
+  ],
+  "by_record": [
+    {
+      "row_key": "R001",
+      "record_id": 1,
+      "action": "new",
+      "spec_status": "partially_documented",
+      "readiness": "partial",
+      "unverified_inputs": 0
+    },
+    {
+      "row_key": "R002",
+      "record_id": 2,
+      "action": "preserved",
+      "spec_status": "partially_documented",
+      "readiness": "partial",
+      "unverified_inputs": 1
+    },
+    {
+      "row_key": "R003",
+      "record_id": 3,
+      "action": "preserved",
+      "spec_status": "partially_documented",
+      "readiness": "partial",
+      "unverified_inputs": 0
+    },
+    {
+      "row_key": "R004",
+      "record_id": 4,
+      "action": "preserved",
+      "spec_status": "partially_documented",
+      "readiness": "partial",
+      "unverified_inputs": 1
+    },
+    {
+      "row_key": "R005",
+      "record_id": 5,
+      "action": "preserved",
+      "spec_status": "partially_documented",
+      "readiness": "partial",
+      "unverified_inputs": 0
+    },
+    {
+      "row_key": "R006",
+      "record_id": 6,
+      "action": "preserved",
+      "spec_status": "documented",
+      "readiness": "ready",
+      "unverified_inputs": 0
+    },
+    {
+      "row_key": "R007",
+      "record_id": 7,
+      "action": "preserved",
+      "spec_status": "partially_documented",
+      "readiness": "partial",
+      "unverified_inputs": 0
+    },
+    {
+      "row_key": "R008",
+      "record_id": 8,
+      "action": "preserved",
+      "spec_status": "partially_documented",
+      "readiness": "partial",
+      "unverified_inputs": 0
+    },
+    {
+      "row_key": "C008-01",
+      "record_id": 8,
+      "action": "preserved",
+      "spec_status": "partially_documented",
+      "readiness": "partial",
+      "unverified_inputs": 0
+    },
+    {
+      "row_key": "C008-02",
+      "record_id": 8,
+      "action": "preserved",
+      "spec_status": "partially_documented",
+      "readiness": "blocked",
+      "unverified_inputs": 0
+    },
+    {
+      "row_key": "R009",
+      "record_id": 9,
+      "action": "preserved",
+      "spec_status": "documented",
+      "readiness": "ready",
+      "unverified_inputs": 0
+    },
+    {
+      "row_key": "C009-01",
+      "record_id": 9,
+      "action": "preserved",
+      "spec_status": "partially_documented",
+      "readiness": "partial",
+      "unverified_inputs": 0
+    },
+    {
+      "row_key": "R010",
+      "record_id": 10,
+      "action": "preserved",
+      "spec_status": "partially_documented",
+      "readiness": "partial",
+      "unverified_inputs": 0
+    },
+    {
+      "row_key": "C010-01",
+      "record_id": 10,
+      "action": "preserved",
+      "spec_status": "unresolved",
+      "readiness": "blocked",
+      "unverified_inputs": 1
+    },
+    {
+      "row_key": "R011",
+      "record_id": 11,
+      "action": "preserved",
+      "spec_status": "partially_documented",
+      "readiness": "partial",
+      "unverified_inputs": 0
+    },
+    {
+      "row_key": "C011-01",
+      "record_id": 11,
+      "action": "preserved",
+      "spec_status": "partially_documented",
+      "readiness": "partial",
+      "unverified_inputs": 0
+    },
+    {
+      "row_key": "R012",
+      "record_id": 12,
+      "action": "preserved",
+      "spec_status": "partially_documented",
+      "readiness": "blocked",
+      "unverified_inputs": 1
+    },
+    {
+      "row_key": "R013",
+      "record_id": 13,
+      "action": "preserved",
+      "spec_status": "partially_documented",
+      "readiness": "blocked",
+      "unverified_inputs": 2
+    },
+    {
+      "row_key": "R014",
+      "record_id": 14,
+      "action": "new",
+      "spec_status": "partially_documented",
+      "readiness": "blocked",
+      "unverified_inputs": 0
+    },
+    {
+      "row_key": "R015",
+      "record_id": 15,
+      "action": "new",
+      "spec_status": "partially_documented",
+      "readiness": "blocked",
+      "unverified_inputs": 0
+    },
+    {
+      "row_key": "R016",
+      "record_id": 16,
+      "action": "new",
+      "spec_status": "partially_documented",
+      "readiness": "blocked",
+      "unverified_inputs": 0
+    },
+    {
+      "row_key": "R017",
+      "record_id": 17,
+      "action": "new",
+      "spec_status": "partially_documented",
+      "readiness": "blocked",
+      "unverified_inputs": 0
+    },
+    {
+      "row_key": "R018",
+      "record_id": 18,
+      "action": "new",
+      "spec_status": "partially_documented",
+      "readiness": "partial",
+      "unverified_inputs": 0
+    },
+    {
+      "row_key": "R019",
+      "record_id": 19,
+      "action": "new",
+      "spec_status": "partially_documented",
+      "readiness": "partial",
+      "unverified_inputs": 0
+    },
+    {
+      "row_key": "R020",
+      "record_id": 20,
+      "action": "new",
+      "spec_status": "partially_documented",
+      "readiness": "partial",
+      "unverified_inputs": 0
+    },
+    {
+      "row_key": "C020-01",
+      "record_id": 20,
+      "action": "new",
+      "spec_status": "partially_documented",
+      "readiness": "partial",
+      "unverified_inputs": 0
+    },
+    {
+      "row_key": "R021",
+      "record_id": 21,
+      "action": "new",
+      "spec_status": "partially_documented",
+      "readiness": "partial",
+      "unverified_inputs": 0
+    },
+    {
+      "row_key": "R022",
+      "record_id": 22,
+      "action": "new",
+      "spec_status": "partially_documented",
+      "readiness": "partial",
+      "unverified_inputs": 0
+    },
+    {
+      "row_key": "R023",
+      "record_id": 23,
+      "action": "new",
+      "spec_status": "partially_documented",
+      "readiness": "partial",
+      "unverified_inputs": 0
+    },
+    {
+      "row_key": "R024",
+      "record_id": 24,
+      "action": "new",
+      "spec_status": "partially_documented",
+      "readiness": "blocked",
+      "unverified_inputs": 0
+    },
+    {
+      "row_key": "R025",
+      "record_id": 25,
+      "action": "new",
+      "spec_status": "partially_documented",
+      "readiness": "blocked",
+      "unverified_inputs": 0
+    },
+    {
+      "row_key": "R026",
+      "record_id": 26,
+      "action": "new",
+      "spec_status": "partially_documented",
+      "readiness": "partial",
+      "unverified_inputs": 0
+    },
+    {
+      "row_key": "R027",
+      "record_id": 27,
+      "action": "new",
+      "spec_status": "partially_documented",
+      "readiness": "blocked",
+      "unverified_inputs": 0
+    },
+    {
+      "row_key": "R028",
+      "record_id": 28,
+      "action": "new",
+      "spec_status": "partially_documented",
+      "readiness": "partial",
+      "unverified_inputs": 0
+    },
+    {
+      "row_key": "R029",
+      "record_id": 29,
+      "action": "new",
+      "spec_status": "unresolved",
+      "readiness": "blocked",
+      "unverified_inputs": 3
+    },
+    {
+      "row_key": "R030",
+      "record_id": 30,
+      "action": "new",
+      "spec_status": "unresolved",
+      "readiness": "blocked",
+      "unverified_inputs": 2
+    },
+    {
+      "row_key": "R031",
+      "record_id": 31,
+      "action": "new",
+      "spec_status": "unresolved",
+      "readiness": "blocked",
+      "unverified_inputs": 1
+    },
+    {
+      "row_key": "R032",
+      "record_id": 32,
+      "action": "new",
+      "spec_status": "partially_documented",
+      "readiness": "blocked",
+      "unverified_inputs": 0
+    },
+    {
+      "row_key": "R033",
+      "record_id": 33,
+      "action": "new",
+      "spec_status": "partially_documented",
+      "readiness": "blocked",
+      "unverified_inputs": 0
+    },
+    {
+      "row_key": "R034",
+      "record_id": 34,
+      "action": "new",
+      "spec_status": "unresolved",
+      "readiness": "blocked",
+      "unverified_inputs": 2
+    },
+    {
+      "row_key": "R035",
+      "record_id": 35,
+      "action": "new",
+      "spec_status": "partially_documented",
+      "readiness": "partial",
+      "unverified_inputs": 0
+    },
+    {
+      "row_key": "C035-01",
+      "record_id": 35,
+      "action": "new",
+      "spec_status": "partially_documented",
+      "readiness": "partial",
+      "unverified_inputs": 0
+    },
+    {
+      "row_key": "R036",
+      "record_id": 36,
+      "action": "new",
+      "spec_status": "partially_documented",
+      "readiness": "partial",
+      "unverified_inputs": 0
+    },
+    {
+      "row_key": "C036-01",
+      "record_id": 36,
+      "action": "new",
+      "spec_status": "partially_documented",
+      "readiness": "partial",
+      "unverified_inputs": 0
+    },
+    {
+      "row_key": "R037",
+      "record_id": 37,
+      "action": "new",
+      "spec_status": "partially_documented",
+      "readiness": "partial",
+      "unverified_inputs": 0
+    },
+    {
+      "row_key": "R038",
+      "record_id": 38,
+      "action": "new",
+      "spec_status": "partially_documented",
+      "readiness": "partial",
+      "unverified_inputs": 0
+    },
+    {
+      "row_key": "R039",
+      "record_id": 39,
+      "action": "new",
+      "spec_status": "partially_documented",
+      "readiness": "partial",
+      "unverified_inputs": 0
+    },
+    {
+      "row_key": "R040",
+      "record_id": 40,
+      "action": "new",
+      "spec_status": "partially_documented",
+      "readiness": "partial",
+      "unverified_inputs": 0
+    },
+    {
+      "row_key": "R041",
+      "record_id": 41,
+      "action": "new",
+      "spec_status": "partially_documented",
+      "readiness": "blocked",
+      "unverified_inputs": 0
+    },
+    {
+      "row_key": "R042",
+      "record_id": 42,
+      "action": "new",
+      "spec_status": "partially_documented",
+      "readiness": "partial",
+      "unverified_inputs": 0
+    },
+    {
+      "row_key": "R043",
+      "record_id": 43,
+      "action": "new",
+      "spec_status": "partially_documented",
+      "readiness": "partial",
+      "unverified_inputs": 0
+    },
+    {
+      "row_key": "C043-01",
+      "record_id": 43,
+      "action": "new",
+      "spec_status": "partially_documented",
+      "readiness": "partial",
+      "unverified_inputs": 0
+    },
+    {
+      "row_key": "R044",
+      "record_id": 44,
+      "action": "new",
+      "spec_status": "partially_documented",
+      "readiness": "partial",
+      "unverified_inputs": 0
+    },
+    {
+      "row_key": "C044-01",
+      "record_id": 44,
+      "action": "new",
+      "spec_status": "partially_documented",
+      "readiness": "partial",
+      "unverified_inputs": 0
+    },
+    {
+      "row_key": "R045",
+      "record_id": 45,
+      "action": "new",
+      "spec_status": "partially_documented",
+      "readiness": "partial",
+      "unverified_inputs": 0
+    },
+    {
+      "row_key": "R046",
+      "record_id": 46,
+      "action": "new",
+      "spec_status": "partially_documented",
+      "readiness": "partial",
+      "unverified_inputs": 0
+    },
+    {
+      "row_key": "C046-01",
+      "record_id": 46,
+      "action": "new",
+      "spec_status": "partially_documented",
+      "readiness": "partial",
+      "unverified_inputs": 0
+    },
+    {
+      "row_key": "C046-02",
+      "record_id": 46,
+      "action": "new",
+      "spec_status": "partially_documented",
+      "readiness": "partial",
+      "unverified_inputs": 0
+    },
+    {
+      "row_key": "R047",
+      "record_id": 47,
+      "action": "new",
+      "spec_status": "partially_documented",
+      "readiness": "partial",
+      "unverified_inputs": 0
+    },
+    {
+      "row_key": "R048",
+      "record_id": 48,
+      "action": "new",
+      "spec_status": "partially_documented",
+      "readiness": "partial",
+      "unverified_inputs": 0
+    },
+    {
+      "row_key": "R049",
+      "record_id": 49,
+      "action": "new",
+      "spec_status": "unresolved",
+      "readiness": "blocked",
+      "unverified_inputs": 1
+    },
+    {
+      "row_key": "R050",
+      "record_id": 50,
+      "action": "new",
+      "spec_status": "partially_documented",
+      "readiness": "partial",
+      "unverified_inputs": 0
+    },
+    {
+      "row_key": "R051",
+      "record_id": 51,
+      "action": "new",
+      "spec_status": "unresolved",
+      "readiness": "blocked",
+      "unverified_inputs": 1
+    },
+    {
+      "row_key": "C051-01",
+      "record_id": 51,
+      "action": "new",
+      "spec_status": "unresolved",
+      "readiness": "blocked",
+      "unverified_inputs": 1
+    },
+    {
+      "row_key": "R052",
+      "record_id": 52,
+      "action": "new",
+      "spec_status": "unresolved",
+      "readiness": "blocked",
+      "unverified_inputs": 2
+    },
+    {
+      "row_key": "C052-01",
+      "record_id": 52,
+      "action": "new",
+      "spec_status": "unresolved",
+      "readiness": "blocked",
+      "unverified_inputs": 1
+    },
+    {
+      "row_key": "R053",
+      "record_id": 53,
+      "action": "new",
+      "spec_status": "partially_documented",
+      "readiness": "partial",
+      "unverified_inputs": 0
+    },
+    {
+      "row_key": "R054",
+      "record_id": 54,
+      "action": "new",
+      "spec_status": "partially_documented",
+      "readiness": "partial",
+      "unverified_inputs": 0
+    },
+    {
+      "row_key": "R055",
+      "record_id": 55,
+      "action": "new",
+      "spec_status": "partially_documented",
+      "readiness": "partial",
+      "unverified_inputs": 0
+    },
+    {
+      "row_key": "C055-01",
+      "record_id": 55,
+      "action": "new",
+      "spec_status": "partially_documented",
+      "readiness": "partial",
+      "unverified_inputs": 0
+    },
+    {
+      "row_key": "R056",
+      "record_id": 56,
+      "action": "new",
+      "spec_status": "partially_documented",
+      "readiness": "partial",
+      "unverified_inputs": 0
+    },
+    {
+      "row_key": "R057",
+      "record_id": 57,
+      "action": "new",
+      "spec_status": "partially_documented",
+      "readiness": "partial",
+      "unverified_inputs": 0
+    },
+    {
+      "row_key": "R058",
+      "record_id": 58,
+      "action": "new",
+      "spec_status": "partially_documented",
+      "readiness": "partial",
+      "unverified_inputs": 0
+    },
+    {
+      "row_key": "C058-01",
+      "record_id": 58,
+      "action": "new",
+      "spec_status": "partially_documented",
+      "readiness": "partial",
+      "unverified_inputs": 0
+    },
+    {
+      "row_key": "R059",
+      "record_id": 59,
+      "action": "new",
+      "spec_status": "partially_documented",
+      "readiness": "partial",
+      "unverified_inputs": 0
+    },
+    {
+      "row_key": "R060",
+      "record_id": 60,
+      "action": "new",
+      "spec_status": "partially_documented",
+      "readiness": "partial",
+      "unverified_inputs": 0
+    },
+    {
+      "row_key": "R061",
+      "record_id": 61,
+      "action": "new",
+      "spec_status": "partially_documented",
+      "readiness": "partial",
+      "unverified_inputs": 0
+    },
+    {
+      "row_key": "R062",
+      "record_id": 62,
+      "action": "new",
+      "spec_status": "partially_documented",
+      "readiness": "blocked",
+      "unverified_inputs": 0
+    },
+    {
+      "row_key": "R063",
+      "record_id": 63,
+      "action": "new",
+      "spec_status": "partially_documented",
+      "readiness": "partial",
+      "unverified_inputs": 0
+    },
+    {
+      "row_key": "R064",
+      "record_id": 64,
+      "action": "new",
+      "spec_status": "partially_documented",
+      "readiness": "partial",
+      "unverified_inputs": 0
+    },
+    {
+      "row_key": "R065",
+      "record_id": 65,
+      "action": "new",
+      "spec_status": "partially_documented",
+      "readiness": "partial",
+      "unverified_inputs": 0
+    },
+    {
+      "row_key": "R066",
+      "record_id": 66,
+      "action": "new",
+      "spec_status": "unresolved",
+      "readiness": "blocked",
+      "unverified_inputs": 2
+    },
+    {
+      "row_key": "R067",
+      "record_id": 67,
+      "action": "new",
+      "spec_status": "partially_documented",
+      "readiness": "blocked",
+      "unverified_inputs": 0
+    },
+    {
+      "row_key": "R068",
+      "record_id": 68,
+      "action": "new",
+      "spec_status": "partially_documented",
+      "readiness": "partial",
+      "unverified_inputs": 0
+    },
+    {
+      "row_key": "R069",
+      "record_id": 69,
+      "action": "new",
+      "spec_status": "unresolved",
+      "readiness": "blocked",
+      "unverified_inputs": 1
+    },
+    {
+      "row_key": "R070",
+      "record_id": 70,
+      "action": "new",
+      "spec_status": "unresolved",
+      "readiness": "blocked",
+      "unverified_inputs": 1
+    },
+    {
+      "row_key": "R071",
+      "record_id": 71,
+      "action": "new",
+      "spec_status": "unresolved",
+      "readiness": "blocked",
+      "unverified_inputs": 1
+    },
+    {
+      "row_key": "R072",
+      "record_id": 72,
+      "action": "new",
+      "spec_status": "unresolved",
+      "readiness": "blocked",
+      "unverified_inputs": 1
+    },
+    {
+      "row_key": "R073",
+      "record_id": 73,
+      "action": "new",
+      "spec_status": "unresolved",
+      "readiness": "blocked",
+      "unverified_inputs": 1
+    },
+    {
+      "row_key": "R074",
+      "record_id": 74,
+      "action": "new",
+      "spec_status": "unresolved",
+      "readiness": "blocked",
+      "unverified_inputs": 1
+    },
+    {
+      "row_key": "R075",
+      "record_id": 75,
+      "action": "new",
+      "spec_status": "unresolved",
+      "readiness": "blocked",
+      "unverified_inputs": 1
+    },
+    {
+      "row_key": "R076",
+      "record_id": 76,
+      "action": "new",
+      "spec_status": "unresolved",
+      "readiness": "blocked",
+      "unverified_inputs": 1
+    },
+    {
+      "row_key": "R077",
+      "record_id": 77,
+      "action": "new",
+      "spec_status": "unresolved",
+      "readiness": "blocked",
+      "unverified_inputs": 1
+    },
+    {
+      "row_key": "R078",
+      "record_id": 78,
+      "action": "new",
+      "spec_status": "unresolved",
+      "readiness": "blocked",
+      "unverified_inputs": 1
+    },
+    {
+      "row_key": "R079",
+      "record_id": 79,
+      "action": "new",
+      "spec_status": "unresolved",
+      "readiness": "blocked",
+      "unverified_inputs": 1
+    },
+    {
+      "row_key": "R080",
+      "record_id": 80,
+      "action": "new",
+      "spec_status": "unresolved",
+      "readiness": "blocked",
+      "unverified_inputs": 1
+    },
+    {
+      "row_key": "R081",
+      "record_id": 81,
+      "action": "new",
+      "spec_status": "unresolved",
+      "readiness": "blocked",
+      "unverified_inputs": 1
+    },
+    {
+      "row_key": "R082",
+      "record_id": 82,
+      "action": "new",
+      "spec_status": "unresolved",
+      "readiness": "blocked",
+      "unverified_inputs": 1
+    },
+    {
+      "row_key": "R083",
+      "record_id": 83,
+      "action": "new",
+      "spec_status": "unresolved",
+      "readiness": "blocked",
+      "unverified_inputs": 1
+    },
+    {
+      "row_key": "R084",
+      "record_id": 84,
+      "action": "new",
+      "spec_status": "unresolved",
+      "readiness": "blocked",
+      "unverified_inputs": 1
+    },
+    {
+      "row_key": "R085",
+      "record_id": 85,
+      "action": "new",
+      "spec_status": "unresolved",
+      "readiness": "blocked",
+      "unverified_inputs": 1
+    },
+    {
+      "row_key": "R086",
+      "record_id": 86,
+      "action": "new",
+      "spec_status": "unresolved",
+      "readiness": "blocked",
+      "unverified_inputs": 1
+    },
+    {
+      "row_key": "R087",
+      "record_id": 87,
+      "action": "new",
+      "spec_status": "unresolved",
+      "readiness": "blocked",
+      "unverified_inputs": 1
+    },
+    {
+      "row_key": "R088",
+      "record_id": 88,
+      "action": "new",
+      "spec_status": "unresolved",
+      "readiness": "blocked",
+      "unverified_inputs": 1
+    },
+    {
+      "row_key": "R089",
+      "record_id": 89,
+      "action": "new",
+      "spec_status": "unresolved",
+      "readiness": "blocked",
+      "unverified_inputs": 1
+    },
+    {
+      "row_key": "R090",
+      "record_id": 90,
+      "action": "new",
+      "spec_status": "unresolved",
+      "readiness": "blocked",
+      "unverified_inputs": 1
+    },
+    {
+      "row_key": "R091",
+      "record_id": 91,
+      "action": "new",
+      "spec_status": "unresolved",
+      "readiness": "blocked",
+      "unverified_inputs": 1
+    },
+    {
+      "row_key": "R092",
+      "record_id": 92,
+      "action": "new",
+      "spec_status": "unresolved",
+      "readiness": "blocked",
+      "unverified_inputs": 1
+    }
+  ],
+  "output_file": "final/validation_master_enriched.json",
+  "output_sha256": "01865bd67ef45e37eb6ea8012e7891b892b7ab76eb3af02b81b3cb157a152b79",
+  "existing_specs_readiness": {
+    "1": "partial",
+    "2": "partial",
+    "3": "partial",
+    "4": "partial",
+    "5": "partial",
+    "6": "ready",
+    "7": "partial",
+    "8": "partial",
+    "9": "ready",
+    "10": "partial",
+    "11": "partial",
+    "12": "blocked",
+    "13": "blocked"
+  },
+  "review_priority": {
+    "high": [
+      "R029",
+      "R030",
+      "R031",
+      "R034",
+      "R049",
+      "R051",
+      "R052",
+      "R066",
+      "R069–R092"
+    ],
+    "reason": "Missing independent calculation source, undocumented Runtime mapping or incomplete original requirement",
+    "medium": [
+      "R014–R017",
+      "R024–R027",
+      "R032–R033",
+      "R041",
+      "R055",
+      "R062",
+      "R067"
+    ],
+    "existing_spec_consistency": "Inherited 17 specs were preserved without changing earlier developer assertions; audit separately."
+  }
+}
