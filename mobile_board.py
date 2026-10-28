@@ -1,239 +1,186 @@
 #!/usr/bin/env python3
-"""Import a pair of Claude artifacts using automatic naming detection.
-
-Supported pairs in Downloads:
-  - out_1.jsonl + out_2.json
-  - SPEC_R006.jsonl + QA_R006.json (for --id 6)
-
-Always remove the LAST NON-EMPTY TEXT LINE from EACH input (including the
-already named files). Validate both cleaned files and then copy to the
-canonical project destinations. On any failure, retain the original inputs.
-If both pairs exist, require an explicit --source-mode to avoid stale imports.
-
-Usage:
-  py tools/import_claude_artifacts.py --id 6
-  py tools/import_claude_artifacts.py --id 6 --source-mode named
-  py tools/import_claude_artifacts.py --id 6 --source-mode generic
-  py tools/import_claude_artifacts.py --id 6 --keep-downloads
-  py tools/import_claude_artifacts.py --id 6 --replace
-"""
-from __future__ import annotations
-
+"""encoder.py: input/ 里的所有文件 -> ZIP -> 1024x1024 RGB PNG (必要时拆成多张)"""
 import argparse
-import json
-import os
-import shutil
-import subprocess
+import hashlib
+import io
+import struct
 import sys
-import tempfile
-from datetime import datetime
+import zipfile
+import zlib
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
+from PIL import Image
+
+MAGIC = b"PNGX"
+VERSION = 1
+# 魔数 | 版本 | 整包SHA-256 | 总图片数 | 本图序号(从0) | 本图数据长度 | 整包长度 | 本图数据CRC32
+HEADER_FMT = ">4sB32sIIIQI"
+HEADER_SIZE = struct.calcsize(HEADER_FMT)  # 61 字节
 
 
-def trim_final_nonempty_line(path: Path) -> tuple[str, str]:
-    """Remove exactly one last nonblank logical line, plus any trailing blank lines.
-
-    Unicode BOM is tolerated on read. The caller validates the result before
-    modifying any original or published file.
-    """
-    text = path.read_text(encoding="utf-8-sig")
-    lines = text.splitlines(keepends=True)
-    while lines and not lines[-1].strip():
-        lines.pop()
-    if len(lines) < 2:
-        raise ValueError(
-            f"{path.name}: fewer than two nontrivial physical lines; "
-            "forced last-line deletion would erase the entire artifact. "
-            "No files changed."
-        )
-    removed = lines.pop()
-    cleaned = "".join(lines).rstrip("\r\n") + "\n"
-    if not cleaned.strip():
-        raise ValueError(f"{path.name}: no content remains after deleting last line")
-    return cleaned, removed
+def build_zip(input_dir: Path) -> bytes:
+    files = sorted(p for p in input_dir.rglob("*") if p.is_file())
+    if not files:
+        sys.exit(f"错误：{input_dir} 中没有文件")
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as zf:
+        for p in files:
+            zf.write(p, p.relative_to(input_dir).as_posix())  # 中文文件名自动 UTF-8
+    print(f"打包 {len(files)} 个文件，原始 {sum(p.stat().st_size for p in files):,} B"
+          f" -> ZIP {buf.tell():,} B")
+    return buf.getvalue()
 
 
-def read_jsonl_text(text: str, filename: str) -> list[dict]:
-    records = []
-    for n, line in enumerate(text.splitlines(), 1):
-        if not line.strip():
-            continue
-        try:
-            item = json.loads(line)
-        except json.JSONDecodeError as exc:
-            raise ValueError(f"{filename}: cleaned JSONL line {n} invalid: {exc}") from exc
-        if not isinstance(item, dict):
-            raise ValueError(f"{filename}: JSONL line {n} must be an object")
-        records.append(item)
-    if not records:
-        raise ValueError(f"{filename}: cleaned JSONL has no records")
-    return records
+def encode(input_dir: Path, output_dir: Path, size: int = 1024) -> list[Path]:
+    payload = build_zip(input_dir)
+    sha = hashlib.sha256(payload).digest()
+    frame = size * size * 3                      # 每张图的总字节容量
+    capacity = frame - HEADER_SIZE               # 扣除头部后的有效容量
+    total = -(-len(payload) // capacity)         # 向上取整
+    output_dir.mkdir(parents=True, exist_ok=True)
 
-
-def check_qa(text: str, rid: int) -> None:
-    try:
-        obj = json.loads(text)
-    except json.JSONDecodeError as exc:
-        raise ValueError(
-            "QA input is not valid JSON AFTER forced last-line removal; "
-            "it may have ended with an essential closing brace. "
-            "No files changed. " + str(exc)
-        ) from exc
-    if not isinstance(obj, dict):
-        raise ValueError("QA input must be a JSON object")
-    if "target_record_id" in obj and int(obj["target_record_id"]) != rid:
-        raise ValueError(f"QA target_record_id does not match --id {rid}")
-    if "expected_row_keys" in obj and f"R{rid:03d}" not in obj["expected_row_keys"]:
-        raise ValueError(f"QA expected_row_keys does not include R{rid:03d}")
-
-
-def discover_download_pair(downloads: Path, rid: int, source_mode: str) -> tuple[Path, Path, str]:
-    """Choose a complete pair, never combine one stale file with another pair."""
-    pairs = {
-        "named": (
-            downloads / f"SPEC_R{rid:03d}.jsonl",
-            downloads / f"QA_R{rid:03d}.json",
-        ),
-        "generic": (downloads / "out_1.jsonl", downloads / "out_2.json"),
-    }
-
-    if not downloads.is_dir():
-        raise FileNotFoundError(f"Downloads folder does not exist: {downloads}")
-
-    if source_mode != "auto":
-        patch, qa = pairs[source_mode]
-        missing = [str(p) for p in (patch, qa) if not p.is_file()]
-        if missing:
-            raise FileNotFoundError(
-                f"Missing {source_mode} artifact(s): {', '.join(missing)}"
-            )
-        return patch, qa, source_mode
-
-    complete = [
-        mode for mode, files in pairs.items()
-        if all(p.is_file() for p in files)
-    ]
-    if len(complete) == 1:
-        mode = complete[0]
-        return *pairs[mode], mode
-    if len(complete) > 1:
-        raise ValueError(
-            "Both named and generic artifact pairs are present in Downloads. "
-            "Use --source-mode named or --source-mode generic to select explicitly."
-        )
-
-    found = {mode: [p.name for p in files if p.is_file()] for mode, files in pairs.items()}
-    raise FileNotFoundError(
-        f"No complete artifact pair for record {rid}. Found: {found}. "
-        "Expected matching pair of named or generic files; do not mix formats."
-    )
-
-
-def atomic_write(path: Path, data: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.NamedTemporaryFile(mode="wb", dir=path.parent,
-                                     prefix=path.name + ".", suffix=".tmp",
-                                     delete=False) as f:
-        tmp = Path(f.name)
-        f.write(data.encode("utf-8"))
-    try:
-        os.replace(tmp, path)
-    finally:
-        tmp.unlink(missing_ok=True)
-
-
-def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--id", type=int, required=True, help="Numbered validation ID, e.g. 3")
-    parser.add_argument("--downloads", type=Path, default=Path.home() / "Downloads")
-    parser.add_argument(
-        "--source-mode", choices=("auto", "named", "generic"), default="auto",
-        help="Auto-detect pair, or explicitly choose when Downloads has both kinds",
-    )
-    parser.add_argument("--keep-downloads", action="store_true", help="Preserve input downloads after import")
-    parser.add_argument("--replace", action="store_true", help="Back up and replace existing destination artifacts")
-    parser.add_argument("--skip-project-validation", action="store_true",
-                        help="Only JSON syntax checks; NOT recommended for production")
-    args = parser.parse_args()
-    if args.id <= 0:
-        parser.error("--id must be positive")
-
-    incoming_patch, incoming_qa, detected_mode = discover_download_pair(
-        args.downloads, args.id, args.source_mode
-    )
-    print(f"Detected Claude download naming: {detected_mode}")
-    print(f"Input patch: {incoming_patch}")
-    print(f"Input QA:    {incoming_qa}")
-
-    dest_patch = ROOT / "patches" / "by_record" / f"SPEC_R{args.id:03d}.jsonl"
-    dest_qa = ROOT / "qa" / "by_record" / f"QA_R{args.id:03d}.json"
-    for incoming, dest in ((incoming_patch, dest_patch), (incoming_qa, dest_qa)):
-        if incoming.resolve() == dest.resolve():
-            raise ValueError(
-                f"Input is already at destination ({dest}); do not trim in-place. "
-                "Place fresh Claude downloads in Downloads first."
-            )
-    for p in (dest_patch, dest_qa):
-        if p.exists() and not args.replace:
-            raise FileExistsError(f"Destination exists: {p}. Use --replace to create a backup and overwrite.")
-
-    cleaned_patch, deleted_patch_line = trim_final_nonempty_line(incoming_patch)
-    cleaned_qa, deleted_qa_line = trim_final_nonempty_line(incoming_qa)
-    parsed_patch = read_jsonl_text(cleaned_patch, incoming_patch.name)
-    check_qa(cleaned_qa, args.id)
-
-    # Validate the actual cleaned patch with the existing project's schema,
-    # source fingerprint, and continuation-row coverage rules BEFORE publication.
-    if not args.skip_project_validation:
-        validator = ROOT / "tools" / "single_validation.py"
-        if not validator.exists():
-            raise FileNotFoundError(f"Missing project validator: {validator}")
-        with tempfile.TemporaryDirectory() as tmpdir:
-            temp_patch = Path(tmpdir) / "candidate.jsonl"
-            temp_patch.write_bytes(cleaned_patch.encode("utf-8"))
-            cmd = [sys.executable, str(validator), "validate", "--id",
-                   str(args.id), "--patch", str(temp_patch)]
-            print("Running Single Validation source/schema/fingerprint checks...")
-            subprocess.run(cmd, cwd=ROOT, check=True)
-
-    # Only commit after both cleaned artifacts and source registry are checked.
-    backups = {}
-    stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-    for path in (dest_patch, dest_qa):
-        if path.exists():
-            backup = path.with_name(f"{path.stem}.{stamp}.bak{path.suffix}")
-            shutil.copy2(path, backup)
-            backups[path] = backup
-
-    published = []
-    try:
-        atomic_write(dest_patch, cleaned_patch)
-        published.append(dest_patch)
-        atomic_write(dest_qa, cleaned_qa)
-        published.append(dest_qa)
-    except Exception:
-        for path in published:
-            if path in backups:
-                shutil.copy2(backups[path], path)
-            else:
-                path.unlink(missing_ok=True)
-        raise
-
-    # Remove Downloads files only after successful validation and publication.
-    if not args.keep_downloads:
-        incoming_patch.unlink()
-        incoming_qa.unlink()
-
-    print(f"\nSUCCESS — R{args.id:03d}: imported {len(parsed_patch)} JSONL row(s)")
-    print(f"Removed 1 last non-empty line from {incoming_patch.name} (length {len(deleted_patch_line.strip())} chars)")
-    print(f"Removed 1 last non-empty line from {incoming_qa.name} (length {len(deleted_qa_line.strip())} chars)")
-    print("Patch:", dest_patch)
-    print("QA:   ", dest_qa)
-    print("Downloads:", "kept" if args.keep_downloads else "removed after success")
-    print(f"Next: py tools/single_validation.py merge --id {args.id}")
+    outputs = []
+    for i in range(total):
+        chunk = payload[i * capacity:(i + 1) * capacity]
+        header = struct.pack(HEADER_FMT, MAGIC, VERSION, sha, total, i,
+                             len(chunk), len(payload), zlib.crc32(chunk))
+        raw = (header + chunk).ljust(frame, b"\x00")   # 尾部补零
+        img = Image.frombytes("RGB", (size, size), raw)
+        out = output_dir / f"data_{sha.hex()[:8]}_{i + 1:03d}of{total:03d}.png"
+        img.save(out, format="PNG", compress_level=6)  # PNG 无损；不能带 alpha / 缩放
+        outputs.append(out)
+        print(f"写入 {out.name}  ({out.stat().st_size:,} B)")
+    print(f"完成：{total} 张图片，整包 SHA-256 = {sha.hex()}")
+    return outputs
 
 
 if __name__ == "__main__":
-    main()
+    ap = argparse.ArgumentParser(description="文件 -> 高密度 PNG")
+    ap.add_argument("-i", "--input", default="input", type=Path)
+    ap.add_argument("-o", "--output", default="encoded", type=Path)
+    ap.add_argument("--size", default=1024, type=int, help="图片边长，默认 1024")
+    a = ap.parse_args()
+    encode(a.input, a.output, a.size)
+
+
+#!/usr/bin/env python3
+"""verify.py: 逐文件比较 input/ 与 recovered/ 的 SHA-256"""
+import argparse
+import hashlib
+import sys
+from pathlib import Path
+
+
+def sha256(p: Path) -> str:
+    h = hashlib.sha256()
+    with p.open("rb") as f:
+        for blk in iter(lambda: f.read(1 << 20), b""):
+            h.update(blk)
+    return h.hexdigest()
+
+
+def scan(root: Path) -> dict:
+    return {p.relative_to(root).as_posix(): sha256(p)
+            for p in sorted(root.rglob("*")) if p.is_file()}
+
+
+if __name__ == "__main__":
+    ap = argparse.ArgumentParser(description="校验恢复结果")
+    ap.add_argument("-a", "--original", default="input", type=Path)
+    ap.add_argument("-b", "--recovered", default="recovered", type=Path)
+    a = ap.parse_args()
+    A, B = scan(a.original), scan(a.recovered)
+    ok = True
+    for name in sorted(A.keys() | B.keys()):
+        if name not in B:
+            print(f"✘ 缺失   {name}"); ok = False
+        elif name not in A:
+            print(f"? 多出   {name}"); ok = False
+        elif A[name] != B[name]:
+            print(f"✘ 不一致 {name}"); ok = False
+        else:
+            print(f"✔ 一致   {name}  {A[name][:16]}…")
+    print("\n全部字节完全一致 ✔" if ok else "\n校验失败 ✘")
+    sys.exit(0 if ok else 1)
+
+
+
+#!/usr/bin/env python3
+"""decoder.py: encoded/ 里的 PNG -> 校验 -> 还原 ZIP -> 解压到 recovered/"""
+import argparse
+import hashlib
+import struct
+import sys
+import zipfile
+import zlib
+from collections import defaultdict
+from pathlib import Path
+
+from PIL import Image
+
+from encoder import HEADER_FMT, HEADER_SIZE, MAGIC
+
+
+def read_png(path: Path):
+    img = Image.open(path)
+    if img.mode != "RGB":
+        sys.exit(f"错误：{path.name} 模式为 {img.mode}，应为 RGB（图片可能被转换/重新压缩过）")
+    raw = img.tobytes()
+    magic, ver, sha, total, idx, clen, plen, crc = struct.unpack(HEADER_FMT, raw[:HEADER_SIZE])
+    if magic != MAGIC:
+        return None
+    chunk = raw[HEADER_SIZE:HEADER_SIZE + clen]
+    if len(chunk) != clen or zlib.crc32(chunk) != crc:
+        sys.exit(f"错误：{path.name} 数据 CRC 校验失败（像素被修改，通常是图片被压缩或缩放）")
+    return sha, total, idx, plen, chunk
+
+
+def safe_extract(zf: zipfile.ZipFile, out: Path):
+    root = out.resolve()
+    for m in zf.infolist():
+        target = (out / m.filename).resolve()
+        if root != target and root not in target.parents:
+            sys.exit(f"错误：ZIP 含非法路径 {m.filename}")
+    zf.extractall(out)
+
+
+def decode(encoded_dir: Path, output_dir: Path):
+    groups = defaultdict(dict)   # sha -> {idx: chunk}
+    meta = {}                    # sha -> (total, payload_len)
+    for p in sorted(encoded_dir.glob("*.png")):
+        r = read_png(p)
+        if r is None:
+            print(f"跳过 {p.name}（不是本工具生成的图片）")
+            continue
+        sha, total, idx, plen, chunk = r
+        groups[sha][idx] = chunk
+        meta[sha] = (total, plen)
+    if not groups:
+        sys.exit("错误：没有找到可解码的 PNG")
+
+    for sha, chunks in groups.items():
+        total, plen = meta[sha]
+        missing = [i + 1 for i in range(total) if i not in chunks]
+        if missing:
+            sys.exit(f"错误：缺少第 {missing} 张图片（共 {total} 张）")
+        payload = b"".join(chunks[i] for i in range(total))
+        if len(payload) != plen or hashlib.sha256(payload).digest() != sha:
+            sys.exit("错误：整包 SHA-256 校验失败")
+        print(f"[{sha.hex()[:8]}] {total} 张图片，SHA-256 校验通过 ✔")
+
+        dest = output_dir if len(groups) == 1 else output_dir / sha.hex()[:8]
+        dest.mkdir(parents=True, exist_ok=True)
+        zip_path = dest / "_recovered.zip"
+        zip_path.write_bytes(payload)
+        with zipfile.ZipFile(zip_path) as zf:
+            safe_extract(zf, dest)
+        zip_path.unlink()
+        print(f"已恢复到 {dest}/")
+
+
+if __name__ == "__main__":
+    ap = argparse.ArgumentParser(description="高密度 PNG -> 原始文件")
+    ap.add_argument("-i", "--input", default="encoded", type=Path)
+    ap.add_argument("-o", "--output", default="recovered", type=Path)
+    a = ap.parse_args()
+    decode(a.input, a.output)
