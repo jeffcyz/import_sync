@@ -1,304 +1,1760 @@
-# ASAP Validation Enrichment — Single Validation Workflow
+# SEC EDGAR Structured Notes Market Intelligence
+## Copilot Master Implementation Prompt v3.0
+### Two-Stage Extraction, Corporate Kerberos Proxy, Issuance Reconciliation, and Dollar Notional Validation
 
-> 适用范围：**一个 Claude Session 只处理一个编号 Validation Record（含其全部 Continuation Rows）**。
-> 
-> 本文适用于新版 `tools/single_validation.py`：支持 `--manual-mode shared`（默认）、`full`、`selected` 以及 `--embed-shared`。**如果你本地还是旧版脚本（仅支持 full/selected），必须先替换新版脚本；仅更新此文档不会让旧脚本自动支持 shared。**
+## 0. ROLE, CONTEXT, AND MISSION
 
-## 1. 目标与原则 / Goal
+You are a senior Python engineer and financial-data architect specializing in:
 
-每次指定一个 `record_id`，将其原始 Validation Master 规则与 ASAP Knowledge Context 一起提供给全新的 Claude 对话。Claude 只为该 Record 及附加条件生成：
+- SEC EDGAR APIs and filing documents
+- US structured notes and structured products
+- Financial issuance analytics
+- Enterprise HTTP networking and Kerberos proxy authentication
+- Python data extraction and ETL
+- Financial data reconciliation and auditability
+- Large-volume document processing
+- Reproducible research pipelines
 
-- `implementation_spec`：Required Data Points、ASAP Runtime Access、Calculation Steps、Validation Logic、Source Evidence 和未解决问题；
-- `QA_R###.json`：本次分析覆盖率、证据情况和剩余问题。
+I am conducting a structured notes market analysis comparing Citigroup against competing issuers.
 
-**Python 负责准备数据、校验和增量合并；Claude 负责阅读来源并分析技术逻辑。** 原始 `validation_master_flat.json` 不会被 `prepare` 或 `merge` 改写。`development_status` 是既有进度属性，不能被 Claude 的 Spec Readiness 覆盖。
+I currently have **one existing Python script open in my VS Code workspace**. It was originally prepared to extract SEC structured notes data.
 
-业务规则以 Validation Master 为准；ASAP Runtime API 以实际提供的 Scripting Manual 为准；User Manual 用于业务语义；Release Notes 用于版本限制；SQL Schema 仅证明数据库元数据，**不能单独证明 Runtime 对象支持直接访问**。未证实的 API、容差、计算公式、默认值应保持 `null` 或标为 `unresolved`，而不是猜测。
+That script is the only existing implementation and project context.
 
-## 2. 项目目录 / Directory Layout
+Assume:
 
-在 `ASAP-Validation-Enrichment/` 根目录执行下面所有命令。
+- No prior Copilot conversation history.
+- No existing repository architecture beyond what is currently present.
+- No existing database or external knowledge base.
+- No previously implemented SEC client or parser.
+- No pre-existing test infrastructure unless discovered in the workspace.
 
-```text
-ASAP-Validation-Enrichment/
-├── source/
-│   ├── validation_master_flat.json        # 原始 Flat JSON；不要直接 enrich
-│   ├── merged_scripting_manual.md         # ASAP Runtime 技术依据
-│   ├── merged_user_manual.md              # ASAP 业务和应用依据
-│   ├── Releases-be4181818e.md            # 版本与兼容性
-│   └── schema_catalog.md                  # SQL Table/View/Column 目录
-├── control/
-│   ├── ROW_REGISTRY.jsonl                 # build_registry.py 生成
-│   ├── PROJECT_STATE.json                 # 来源 SHA-256；本工作流不依赖旧 Session 状态
-│   └── SPEC_SCHEMA.json                   # implementation_spec 固定 Schema
-├── context_packs/
-│   ├── shared/
-│   │   └── ASAP_KNOWLEDGE_CONTEXT.md      # 4 份 Markdown 的合并版本
-│   └── by_record/
-│       ├── R020_HEADER.txt
-│       ├── R020_CONTEXT.txt
-│       └── R020_EXECUTE.txt
-├── prompts/
-│   ├── SINGLE_VALIDATION_HEADER.md
-│   └── SINGLE_VALIDATION_EXECUTE.md
-├── patches/by_record/
-│   └── SPEC_R020.jsonl                     # Claude 输出，合并前须验证
-├── qa/by_record/
-│   └── QA_R020.json                        # Claude QA 输出，单独保存
-├── final/
-│   ├── validation_master_enriched.json    # 本地增量合并结果
-│   └── validation_master_enriched_*.bak.json  # 旧版本备份
-├── tools/
-│   ├── build_registry.py
-│   ├── build_asap_context.py
-│   └── single_validation.py               # 本文对应新版脚本
-└── docs/
-    └── ONE_VALIDATION_WORKFLOW.md
-```
+Your assignment is to inspect that script and turn it into a reliable, maintainable, auditable Python project.
 
-真实的公司手册、原始 Validation JSON、Context Pack、Claude Patch 和 QA 结果应留在获公司批准的本地环境；**不要提交到公开 GitHub 仓库**。确认项目 `.gitignore` 已排除这些文件，提交前仍须人工检查 `git status`。
+**Do not stop at a design document. Implement the actual functionality.**
 
-## 3. 首次初始化 / One-time Setup
+The resulting system must support two stages.
 
-### 3.1 准备五份来源
+### Stage 1 — Structured Notes Issuance Identification
 
-将原始 Flat JSON 与四份 Markdown 按上表文件名放入 `source/`。JSON 应包含 `record_id`、`parent_record_id`、`row_type` 和已有开发状态；不应是先前 enrichment 后的数据。
+Retrieve SEC filing metadata, identify actual structured-note filings, classify preliminary/final/amended documents, reconcile filings belonging to the same issuance, eliminate double counting, and generate a validated unique issuance dataset.
 
-### 3.2 建立 Row Registry
+### Stage 2 — Dollar Notional Extraction
 
-```powershell
-py tools/build_registry.py
-```
+Extend Stage 1 by extracting actual issued principal amounts from SEC Pricing Supplements, validating them against the underlying documents, and generating a reliable dollar-notional issuance dataset.
 
-预期生成：
+Both stages must use SEC Filing Date for monthly reporting.
 
-- `control/ROW_REGISTRY.jsonl`：编号记录对应 `R001`、`R020` 等；附加行对应 `C020-01` 等；每行包含原始数据 Fingerprint。
-- `control/PROJECT_STATE.json`：保存原始 Flat JSON 的 SHA-256。
+Both stages must generate compact CSV outputs suitable for uploading into Stylus.
 
-原始 JSON **改变时**需要重建 Registry，但旧 Patch 的 Hash 将可能失效，已有 Enriched 文件也可能无法与新基线合并。不要通过修改 Hash 绕过检查，应先进行版本迁移或重新生成相关 Patch。
+The primary objective is trustworthy competitor league-table data, not merely successful downloading of filings.
 
-### 3.3 构建共享知识文档
+---
 
-```powershell
-py tools/build_asap_context.py
-```
+# 1. FIXED BUSINESS REQUIREMENTS
 
-预期生成：
+## 1.1 Research period
 
-`context_packs/shared/ASAP_KNOWLEDGE_CONTEXT.md`
-
-它包含四份原文，并以 `SOURCE_ID` 和 `BEGIN SOURCE / END SOURCE` 界定来源。四份 Manual 有变化时重新运行即可。**将它们合并只减少本地管理和粘贴次数，不会减少 Claude 实际处理的 Token 数量。**
-
-建议检查：
-
-```powershell
-Test-Path context_packs/shared/ASAP_KNOWLEDGE_CONTEXT.md
-Get-Item context_packs/shared/ASAP_KNOWLEDGE_CONTEXT.md | Select-Object Name,Length
-```
-
-如果出现 `assert actual == combined`（Windows CRLF/LF 换行问题），在 `build_asap_context.py` 中改用 `write_bytes(combined.encode("utf-8"))` 和 `read_bytes().decode("utf-8")` 作字节一致性验证。
-
-## 4. 每条 Validation 的标准流程 / Per-record Procedure
-
-以下以 **Record #20** 为例；其他 ID 替换 `20` 即可。
-
-### Step 1 — Generate record-specific Claude Context
-
-```powershell
-py tools/single_validation.py prepare --id 20
-```
-
-新版脚本的默认 Manual Mode 为 `shared`。它先确认共享文档存在及四个 Source ID 是否齐全，然后生成：
+The study period is fixed:
 
 ```text
-context_packs/by_record/R020_HEADER.txt
-context_packs/by_record/R020_CONTEXT.txt
-context_packs/by_record/R020_EXECUTE.txt
+START_DATE = 2025-01-01
+END_DATE   = 2026-10-31
 ```
 
-`R020_CONTEXT.txt` **只含**当前编号记录、属于它的全部 Continuation Rows、对应 Row Registry 和 SPEC_SCHEMA；不会再嵌入四份 Manual，因此体积较小。
+The dataset must cover exactly 22 calendar months.
 
-`prepare` **不会**生成 `SPEC_R020.jsonl`，也不会更新最终 JSON。
+Reporting must use:
 
-### Step 2 — New Claude conversation / 粘贴顺序
+**SEC Filing Date**
 
-每条 Validation **重新开启一个 Claude Session**，按以下顺序提供资料：
+Do not substitute:
 
-1. `R020_HEADER.txt`：本次任务身份与约束，Claude 应等待最后的 Execute 指令。
-2. `R020_CONTEXT.txt`：原始 Validation、Row Key/Fingerprint 和固定 Schema。
-3. `context_packs/shared/ASAP_KNOWLEDGE_CONTEXT.md`：通用 ASAP 文档全文（必要时按完整 Source Blocks 分次 Paste）。
-4. `R020_EXECUTE.txt`：**最后发送**，启动本 Record 的深度分析。
+- Pricing Date
+- Trade Date
+- Issue Date
+- Settlement Date
+- Maturity Date
 
-**重要：本地路径不代表 Claude 能读取本地文件。** 必须实际粘贴 Markdown 的内容，或通过经批准的 Chat 页面 Pasted Text 附件提供，而不是只在消息中写文件路径。不要同时粘贴四份独立 Manual 和 Shared Context，避免重复消耗 Token。
+These secondary dates may be extracted for identification, classification, and reconciliation but must not determine the reporting month.
 
-如果希望**一个 Record Context 文件包含 Shared 全文**，也可以运行：
+For every countable issuance event, use the SEC Filing Date of the selected representative filing.
 
-```powershell
-py tools/single_validation.py prepare --id 20 --embed-shared
+Preserve all related filing dates for auditability.
+
+The reporting cutoff is inclusive through October 31, 2026.
+
+Do not silently include November 2026 filings or use post-cutoff filing information to change the historical results. If later filings are consulted in a separately enabled retrospective mode, preserve that distinction and do not silently change the original as-of reporting basis.
+
+## 1.2 Issuer universe
+
+The existing Python script contains exactly 13 issuer groups:
+
+1. Citigroup
+2. JPMorgan
+3. Goldman Sachs
+4. Morgan Stanley
+5. Bank of America
+6. Wells Fargo
+7. Barclays
+8. UBS
+9. HSBC
+10. RBC
+11. TD
+12. CIBC
+13. Scotiabank
+
+Do not automatically increase this number to 15.
+
+A separate research description mentioned 15 issuers, but the existing source script specifies 13. The additional two were never identified.
+
+Preserve the existing `ISSUER_CIKS` dictionary as the starting configuration.
+
+However, an issuer group may operate through multiple legal issuing entities.
+
+Implement a configurable mapping between:
+
+```text
+issuer_group
+issuer_legal_entity
+filing_cik
+primary_issuer_cik
+guarantor
 ```
 
-此时粘贴顺序改为 `HEADER → CONTEXT → EXECUTE`，**不要再额外粘贴 Shared 文件**。
+Use official SEC entity information to validate CIK mappings.
 
-> 提示：`--embed-shared` 是本地拼接选项，并不减少 Token。若 Context 太长，应改用 Selected Mode。
+Where appropriate, support multiple confirmed legal-entity CIKs within an issuer group.
 
-### Step 3 — Claude outputs / 本地保存
+Do not invent or silently replace CIKs.
 
-Claude 完成后应生成两个 Artifact：
+Do not treat the parent company's CIK as automatically representing all issuance subsidiaries.
 
-| Claude 输出 | 保存位置 | 功能 |
-|---|---|---|
-| `SPEC_R020.jsonl` | `patches/by_record/SPEC_R020.jsonl` | `R020` 以及所有 `C020-##` 的 Specs |
-| `QA_R020.json` | `qa/by_record/QA_R020.json` | 来源、假设、缺口和 Readiness 报告 |
+Record evidence for issuer mappings and flag unverified associations.
 
-`SPEC_R020.jsonl` 要求：**一行一个完整 JSON 对象**，不得带 Markdown 的 ```jsonl 代码围栏，也不是 JSON Array。
+Prevent duplicate counting across related filing entities.
 
-每条 Patch 对象的外层字段固定为：
+## 1.3 Market universe
 
-```json
-{"row_key":"R020","source_row_sha256":"<从本地 ROW_REGISTRY 取得的精确哈希>","implementation_spec":{"...":"根据真实来源完整填写"}}
+The initial SEC forms to screen are:
+
+```text
+424B2
+FWP
 ```
 
-上面的结构只是示意；不能将占位符原样当作实际 Patch。若 #20 有一个 Continuation，则应另外有 `C020-01` 的独立 JSONL 行。`source_row_sha256` 必须与本地 Registry 完全一致。
+These are screening candidates, not proof that a filing is a structured note or a final issuance.
 
-### Step 4 — Validate the patch / 本地校验
+The system must distinguish ordinary registered debt securities from eligible structured notes.
 
-```powershell
-py tools/single_validation.py validate --id 20
+Implement configurable form coverage and conservative product classification.
+
+The intended universe is SEC-observable registered structured-note issuance.
+
+Do not claim coverage of unregistered, private-placement, or otherwise non-EDGAR-observable issuance.
+
+---
+
+# 2. CRITICAL: CORPORATE PROXY AND KERBEROS AUTHENTICATION
+
+This section contains an actual proxy implementation previously used successfully in my Citi corporate environment.
+
+**Treat this code as the primary technical reference for the SEC HTTP transport layer.**
+
+Do not replace it with a generic unauthenticated proxy implementation.
+
+Do not assume simply setting `HTTP_PROXY` or `HTTPS_PROXY` is sufficient.
+
+## 2.1 Verified corporate network information
+
+Previously working proxy:
+
+```text
+HTTP:
+http://webproxy.wlb2.nam.nsroot.net:8080
+
+HTTPS:
+http://webproxy.wlb2.nam.nsroot.net:8080
 ```
 
-至少检查：JSONL 可以解析、Row Key 不缺失/不重复、Continuation Rows 全覆盖、每个 Patch 对应的原始 Fingerprint 正确，以及 `implementation_spec` 满足本项目 Schema 的必需字段和支持的类型约束。
+Previously working libraries and mechanisms:
 
-**此检查不能保证 Claude 的 ASAP API 映射或公式真的正确。** 必须对重要技术结论核对所引用的 Manual 章节，`implementation_readiness: ready` 不应替代证据审查。
-
-如果验证失败，先检查 `SPEC_R020.jsonl` 是否确实使用当前 Registry 的真实 Hash、是否包含所有关联 Row Keys，以及有无从 Claude 复制出的代码围栏。
-
-### Step 5 — Incremental Merge / 增量写入
-
-验证通过后运行：
-
-```powershell
-py tools/single_validation.py merge --id 20
+```text
+requests
+requests_kerberos
+urllib3
+requests.Session
+requests.adapters.HTTPAdapter
+HTTPKerberosAuth
+Proxy-Authorization
 ```
 
-输出：
+The proxy uses Kerberos authentication.
 
-`final/validation_master_enriched.json`
+The successful implementation relied on overriding the `proxy_headers()` method in a custom Requests HTTPAdapter.
 
-第一次 Merge：基于原始 Flat JSON 创建 Enriched JSON，只添加 #20 和 Continuation Rows 的 `implementation_spec`。
+## 2.2 Actual previously working Python proxy code
 
-之后处理 #21：
+The following code is taken directly from the relevant proxy portion of my previous working Python request implementation.
 
-```powershell
-py tools/single_validation.py prepare --id 21
-# New Claude conversation; 保存 SPEC_R021.jsonl / QA_R021.json
-py tools/single_validation.py validate --id 21
-py tools/single_validation.py merge --id 21
+It was originally used to access a BNY API in the same corporate network.
+
+**Use this as the reference implementation.**
+
+```python
+import requests
+
+from requests_kerberos import HTTPKerberosAuth
+from urllib3.util import parse_url
+
+
+proxies = {
+    'http': 'http://webproxy.wlb2.nam.nsroot.net:8080',
+    'https': 'http://webproxy.wlb2.nam.nsroot.net:8080'
+}
+
+
+class HTTPAdapterWithProxyKerberosAuth(
+    requests.adapters.HTTPAdapter
+):
+
+    def proxy_headers(self, proxy):
+        headers = {}
+
+        auth = HTTPKerberosAuth()
+
+        negotiate_details = auth.generate_request_header(
+            None,
+            parse_url(proxy).host,
+            is_preemptive=True
+        )
+
+        headers['Proxy-Authorization'] = negotiate_details
+
+        return headers
+
+
+session = requests.Session()
+
+session.proxies = proxies
+
+session.verify = False
+
+session.mount(
+    'https://',
+    HTTPAdapterWithProxyKerberosAuth()
+)
 ```
 
-这会在**同一份** `final/validation_master_enriched.json` 中保留 #20，新增 #21，不会将原有记录清空。
+The original implementation also used:
 
-重新分析一个已经 Merge 的 Record，需要显式使用：
-
-```powershell
-py tools/single_validation.py merge --id 20 --replace
+```python
+requests.packages.urllib3.disable_warnings()
 ```
 
-新版脚本替换前会为现有 Enriched JSON 创建带时间戳的 `.bak.json` 备份；操作完成后可检查 `final/`。
+And performed requests through the configured session:
 
-### Step 6 — Open / Verify final output
+```python
+response = session.get(
+    request_url,
+    headers=headers
+)
 
-```powershell
-code final/validation_master_enriched.json
-# 或
-explorer final
+response.raise_for_status()
 ```
 
-也可执行：
+The original function contained a reusable session-return mechanism:
 
-```powershell
-Test-Path final/validation_master_enriched.json
+```python
+if return_session:
+    return session
 ```
 
-`True` 表示文件存在，但并不等于全部 92 条 Validation 都完成。尚未分析的 Record 可以不含 `implementation_spec`；这是**增量处理**的预期行为。
+This allowed the configured session to be reused by other functions.
 
-## 5. 其他 Manual Modes / Token 管理
+### Important interpretation
 
-### Shared mode（默认，推荐）
+The code above demonstrates the previously functioning authentication mechanism.
 
-```powershell
-py tools/single_validation.py prepare --id 20
+The following are essential:
+
+1. `requests.Session()`
+2. `session.proxies`
+3. Custom `HTTPAdapterWithProxyKerberosAuth`
+4. Overridden `proxy_headers()`
+5. `HTTPKerberosAuth()`
+6. `generate_request_header()`
+7. `parse_url(proxy).host`
+8. `is_preemptive=True`
+9. `Proxy-Authorization`
+10. Mounting the custom adapter for HTTPS traffic
+
+Preserve these mechanisms unless actual compatibility testing identifies a necessary change.
+
+Do not silently substitute another authentication mechanism.
+
+If the installed versions of Requests, urllib3, or requests-kerberos require adjustments, document the incompatibility and make the smallest appropriate change while preserving Kerberos proxy authentication.
+
+Do not assume that a successful adapter initialization proves working network authentication.
+
+Actual HTTPS requests must be tested.
+
+## 2.3 TLS certificate verification
+
+The original working script used:
+
+```python
+session.verify = False
 ```
 
-生成小型 Record Context；Claude 中再 Paste 一份 Shared Knowledge。
+It also disabled urllib3 certificate warnings.
 
-### Shared mode + Embed（只粘贴一份 Context）
+This is part of the original environment history, not a mandatory production security setting.
 
-```powershell
-py tools/single_validation.py prepare --id 20 --embed-shared
+The new project must:
+
+1. Prefer proper TLS verification.
+2. Support an approved corporate CA bundle.
+3. Support `REQUESTS_CA_BUNDLE` or an equivalent configuration.
+4. Diagnose certificate verification failures clearly.
+5. Never disable TLS verification silently.
+6. Keep any insecure diagnostic mode explicitly opt-in and disabled by default.
+7. Display a warning whenever insecure diagnostic mode is selected.
+8. Avoid suppressing unrelated security warnings.
+
+A corporate certificate problem should be distinguished from a Kerberos authentication failure.
+
+The application must never quietly enable `verify=False` merely to make an HTTPS request succeed.
+
+Use corporate-approved security settings and comply with applicable enterprise policies.
+
+## 2.4 Do not copy BNY-specific business headers
+
+The previous BNY implementation contained:
+
+- BNY-specific cookies
+- Browser User-Agent values
+- BNY Referer
+- ADRUM headers
+- Browser-only fetch headers
+- BNY API URL parameters
+- BNY-specific JSON decoding
+
+These are not part of the proxy authentication mechanism.
+
+Do not copy them into the SEC client.
+
+Do not retain or log those cookies.
+
+The SEC application must use its own SEC-compliant headers.
+
+At a minimum:
+
+```python
+headers = {
+    "User-Agent": SEC_USER_AGENT,
+    "Accept": "application/json"
+}
 ```
 
-Record Context 中已包含 Shared 全文；Claude 中不必再粘贴 Shared。
+Set an appropriate Accept header for HTML filings separately.
 
-### Full mode（旧模式）
+Use a configurable, real, identifying contact name and email in `SEC_USER_AGENT`.
 
-```powershell
-py tools/single_validation.py prepare --id 20 --manual-mode full
+Do not reuse a fictitious or placeholder contact identity for live collection.
+
+## 2.5 Centralize the session
+
+Create a reusable session factory, for example:
+
+```text
+create_sec_session()
 ```
 
-从 `source/` 直接读取四份独立 Markdown，并包含在每条 Record Context 中，不依赖 Shared 文件。
+And an HTTP client abstraction, for example:
 
-### Selected mode（只提供相关章节）
-
-先在本地创建实际存在的片段文件，例如 `source/chunks/SM_interest.md`，再运行：
-
-```powershell
-py tools/single_validation.py prepare --id 20 --manual-mode selected `
-  --include ASAP_SCRIPTING_MANUAL:source/chunks/SM_interest.md `
-  --include ASAP_USER_MANUAL:source/chunks/UM_bond.md
+```text
+SecEdgarClient
 ```
 
-所列片段必须确实存在。Claude 只能基于当前实际粘贴的章节得出技术结论；未提供来源的能力标为未解决。
+The client must use the corporate proxy session for:
 
-## 6. 常见问题 / Troubleshooting
+- Main SEC Submissions JSON
+- Historical paginated JSON
+- SEC filing documents
+- Filing exhibits
+- Any other SEC HTTPS request
 
-| 问题 | 原因 / 处理 |
-|---|---|
-| `unrecognized arguments: --embed-shared` | 正在使用旧版 `single_validation.py`；替换为支持 shared 的新版。 |
-| `invalid choice: 'shared'` | 同样说明旧脚本尚未更新。 |
-| `Shared Context not found` | 运行 `py tools/build_asap_context.py`，确认文件在 `context_packs/shared/`。 |
-| `Missing or duplicated source` | Shared 文件缺少四个 SOURCE_ID 之一，或将相同 Source Block 重复合并。 |
-| `Source fingerprint mismatch` | 原始 Flat JSON 与 Row Registry 不一致；检查文件版本，不要改 Hash 绕过验证。 |
-| `Patch fingerprint mismatch` | Claude 输出 Hash 和 Registry 不符；从对应 Registry 条目核实并纠正 Patch。 |
-| `Patch row coverage mismatch` | 缺少目标主行或 Continuation，或含无关 Row Key。 |
-| `Invalid JSONL` | 复制了 Markdown 代码围栏、漏掉对象边界、用 JSON Array 代替 JSONL 等。 |
-| `already enriched` | 此 Record 已 Merge；如确实需要替换，使用 `--replace`。 |
-| `Original data changed` | `final/` 中已有文件与原始 Flat JSON 不一致；检查是否手动改动了业务字段或 `development_status`。 |
-| `validate` 通过但没有 final JSON | `validate` 不创建最终文件；继续运行 `merge`。 |
-| Claude Context 超出限制 | 不要同时提供 Full/Shared 两份；用 `selected` 只提供经过定位的章节。 |
+Do not leave standalone `requests.get()` calls scattered across the codebase.
 
-## 7. 最短日常命令 / Quick Reference
+Do not automatically switch to direct internet access if the configured corporate proxy fails.
 
-首次初始化：
+Be aware that Requests proxy settings can be affected by environment variables.
 
-```powershell
-py tools/build_registry.py
-py tools/build_asap_context.py
+Inspect and control proxy precedence so that the intended proxy is used consistently.
+
+Keep Kerberos credentials and generated authentication tokens out of logs.
+
+## 2.6 SEC connectivity tests
+
+Create a dedicated mode:
+
+```text
+connectivity
 ```
 
-每一条 Validation：
+It must test both:
 
-```powershell
-py tools/single_validation.py prepare --id 20
-# Claude: HEADER → CONTEXT → SHARED → EXECUTE
-# Save: patches/by_record/SPEC_R020.jsonl and qa/by_record/QA_R020.json
-py tools/single_validation.py validate --id 20
-py tools/single_validation.py merge --id 20
+```text
+https://data.sec.gov
+https://www.sec.gov
 ```
 
-重新分析同一条：
+Use legitimate lightweight SEC endpoints, not just a TCP connectivity check.
 
-```powershell
-py tools/single_validation.py merge --id 20 --replace
+For example, request valid SEC Submissions JSON for a configured CIK and validate the response structure.
+
+Check:
+
+- HTTP status code
+- Content-Type
+- JSON validity
+- Expected CIK information
+- Kerberos proxy authentication
+- Certificate verification
+- Response duration
+- Whether the body is actually SEC data
+- Whether the corporate proxy returns an interception or error page
+
+Provide specific diagnostics for:
+
+```text
+407 Proxy Authentication Required
+403 Forbidden
+429 Too Many Requests
+SSL Certificate Verification Error
+Connection Timeout
+Invalid JSON
+Unexpected HTML Response
 ```
 
-**最终原则：** 一条 Validation、一轮 Claude、一个 JSONL Patch、一次本地校验、一次增量 Merge。继续保留原始数据和明确来源证据。
+A `200 OK` response containing a proxy-generated HTML page must not be treated as successful SEC JSON retrieval.
+
+If live connectivity fails, do not automatically proceed with bulk downloads.
+
+Instead, finish the offline implementation and tests and report the exact blocker.
+
+---
+
+# 3. SEC EDGAR HTTP REQUEST MANAGEMENT
+
+Implement a centralized request manager around the verified proxy-compatible session.
+
+Official references:
+
+```text
+https://www.sec.gov/search-filings/edgar-application-programming-interfaces
+https://www.sec.gov/about/webmaster-frequently-asked-questions
+```
+
+Follow the SEC's published Fair Access guidance.
+
+## 3.1 Rate limiting
+
+The SEC publishes a maximum automated access rate of 10 requests per second.
+
+Do not design the system to operate continuously at that maximum.
+
+Use an initially conservative configurable default of approximately:
+
+```text
+2 requests per second
+```
+
+Because the corporate proxy may use shared egress IP addresses, do not assume that all available SEC request capacity belongs to this application.
+
+Implement:
+
+- Centralized request throttling
+- Low default concurrency
+- HTTP timeout settings
+- Bounded retries
+- Exponential backoff
+- Appropriate randomized retry delays
+- Support for Retry-After
+- Respect for SEC access-denied responses
+- Error categorization
+
+Never attempt to bypass SEC rate limits through proxy rotation or changing identities.
+
+## 3.2 Resilience
+
+The pipeline must tolerate interruptions.
+
+Implement:
+
+- Incremental processing
+- Request-level checkpoints
+- Document-level checkpoints
+- Download status tracking
+- Failure logs
+- Retry queues
+- Resume support
+- Cached response reuse
+- Idempotent processing
+- Atomic output writes
+
+A failure after processing thousands of filings must not require starting the entire collection again.
+
+Differentiate temporary network failures from permanent data-quality failures.
+
+---
+
+# 4. PROJECT ARCHITECTURE
+
+Keep the implementation small and maintainable.
+
+Do not build an unnecessarily complex application framework.
+
+Suggested structure:
+
+```text
+sec-structured-notes/
+|
+|-- config/
+|   |-- settings.example.yaml
+|   |-- issuer_mapping.yaml
+|
+|-- src/
+|   |-- sec_client.py
+|   |-- proxy_auth.py
+|   |-- filing_index.py
+|   |-- document_fetcher.py
+|   |-- filing_classifier.py
+|   |-- issuance_matcher.py
+|   |-- notional_parser.py
+|   |-- validator.py
+|   |-- exporter.py
+|   |-- cli.py
+|
+|-- tests/
+|   |-- fixtures/
+|   |-- test_proxy.py
+|   |-- test_sec_client.py
+|   |-- test_classifier.py
+|   |-- test_deduplication.py
+|   |-- test_notional.py
+|   |-- test_export.py
+|
+|-- data/
+|   |-- cache/
+|   |-- state/
+|   |-- output/
+|   |-- reports/
+|
+|-- requirements.txt
+|-- README.md
+|-- .gitignore
+```
+
+This structure is illustrative, not mandatory.
+
+Do not add empty placeholder modules merely to match the example.
+
+Use clear module responsibilities and minimize unnecessary dependencies.
+
+A lightweight local SQLite database is acceptable for persistent processing state, filing relationships, and checkpoint management.
+
+Raw cached data and output files should be excluded from Git unless explicitly required.
+
+---
+
+# 5. STAGE 1 — FILING INDEX DISCOVERY
+
+## 5.1 Objective
+
+Fetch filing metadata for all configured legal-entity CIKs across the 22-month period.
+
+Use the official SEC Submissions API.
+
+Example endpoint:
+
+```text
+https://data.sec.gov/submissions/CIK##########.json
+```
+
+Support:
+
+- Recent submissions
+- Paginated historical submissions
+- Filing Date filtering
+- Form Type filtering
+- Primary Document retrieval metadata
+- Accession Number preservation
+- Document URL construction
+- Duplicate accession reconciliation
+
+## 5.2 Historical pagination
+
+The SEC Submissions JSON may reference historical files through:
+
+```text
+filings.files
+```
+
+Retrieve relevant historical pages where necessary.
+
+Use available pagination metadata to avoid downloading irrelevant historical pages whenever possible.
+
+Do not assume that the main recent filings block covers the full requested period.
+
+Do not assume that all historical filings are returned in a single API response.
+
+## 5.3 Mandatory original metadata
+
+Preserve at least:
+
+```text
+issuer_group
+issuer_legal_entity
+cik
+filing_date
+form_type
+accession_number
+primary_document
+primary_document_description
+acceptance_datetime
+sec_url
+source_json_url
+```
+
+Preserve additional useful SEC metadata where available.
+
+Keep the initial raw filing inventory before classification and deduplication.
+
+The raw inventory must be recoverable for auditing.
+
+## 5.4 Filing-level deduplication
+
+Reconcile duplicate retrievals of the same accession.
+
+Use SEC accession identifiers and filer relationships appropriately.
+
+A duplicated retrieval should not become two filings.
+
+However, records from different accession numbers must not be merged merely because they share a CUSIP or document name.
+
+Never merge missing-CUSIP filings based only on null values.
+
+---
+
+# 6. STAGE 1 — STRUCTURED NOTES CLASSIFICATION
+
+The original script only filters SEC forms.
+
+That is insufficient for the intended league table.
+
+**Stage 1 must identify structured-note issuance events, not merely count SEC filing submissions.**
+
+This requires selective inspection of actual filing documents.
+
+Stage 1 is therefore a classified-filing pipeline rather than a strictly index-only pull.
+
+## 6.1 Selective document retrieval
+
+Retrieve the relevant primary document or supporting SEC document when classification requires it.
+
+Avoid indiscriminate downloading of all large filing content.
+
+Prioritize documents using:
+
+- SEC Form Type
+- Primary Document Description
+- Document title
+- Structured-note product terms
+- Preliminary/final indicators
+- Amendment relationships
+- Available document metadata
+
+Use deterministic, explainable classification rules.
+
+Retain the source URL and evidence supporting each classification.
+
+## 6.2 Classification categories
+
+Implement at least:
+
+```text
+FINAL
+PRELIMINARY
+AMENDED_PRELIMINARY
+AMENDED_FINAL
+FWP_ONLY
+NON_STRUCTURED
+DUPLICATE
+REVIEW_REQUIRED
+```
+
+Make the classifications mutually understandable and document their definitions.
+
+A 424B2 filing is not automatically FINAL.
+
+A FWP filing is not automatically a separate issuance.
+
+A document identified as Preliminary must not be counted as a confirmed issuance merely because it has a CUSIP.
+
+## 6.3 Structured-note product identification
+
+Implement conservative recognition of common structured-note categories, including where supported by filing evidence:
+
+- Equity-linked notes
+- Index-linked notes
+- Interest-rate-linked notes
+- Credit-linked structured notes
+- Commodity-linked notes
+- Currency-linked notes
+- Autocallable notes
+- Contingent coupon notes
+- Buffered notes
+- Barrier notes
+- Other structured debt instruments
+
+Do not treat all registered debt securities as structured notes.
+
+Do not automatically exclude an unusual eligible instrument solely because its title differs from a familiar template.
+
+Support issuer-specific classification rules where justified.
+
+Preserve:
+
+```text
+product_category
+filing_classification
+classification_rule
+classification_confidence
+classification_evidence
+review_reason
+```
+
+Confidence must represent transparent rule-based evidence quality.
+
+Do not invent statistically calibrated probabilities.
+
+---
+
+# 7. STAGE 1 — ISSUANCE-LEVEL DEDUPLICATION
+
+This is a critical business requirement.
+
+We need two separate quantities:
+
+```text
+Raw Filing Count
+Unique Structured Notes Issuance Count
+```
+
+They are not interchangeable.
+
+## 7.1 Identify the economic issuance
+
+Use combinations of:
+
+```text
+Issuer Legal Entity
+CUSIP
+Pricing Date
+Issue Date
+Product Name
+Series
+Tranche
+Security Identifiers
+Accession Relationships
+Final/Preliminary Relationships
+```
+
+An issuance may have multiple associated filings.
+
+One filing may also contain multiple instruments.
+
+Design the data model to support many-to-many filing/instrument relationships where required.
+
+## 7.2 Mandatory deduplication rules
+
+1. Preliminary and final filings for the same issuance must not be counted separately.
+
+2. Multiple amended preliminary filings generally represent the same prospective issuance.
+
+3. A FWP and Final Pricing Supplement for the same security must not automatically become separate issuances.
+
+4. Multiple final filings must be reconciled using actual document relationships and security identifiers.
+
+5. Missing CUSIPs must not cause unrelated filings to merge.
+
+6. One filing containing multiple CUSIPs may represent multiple issuance events.
+
+7. The same CUSIP may be used in distinct reopening or additional-issuance events.
+
+8. Multiple related legal entities must not inflate group-level issuance counts.
+
+9. Uncertain matches must be flagged for review rather than forcibly merged.
+
+10. Maintain an explicit filing-to-issuance relationship table.
+
+## 7.3 Deterministic issuance IDs
+
+Generate a stable:
+
+```text
+issuance_id
+```
+
+The identifier must be reproducible from source-backed information.
+
+Never generate a shared issuance identifier using null CUSIPs or other missing fields as if they were meaningful matching keys.
+
+Ambiguous records may receive temporary internal identifiers but must remain marked unresolved.
+
+## 7.4 Representative filing
+
+For each confirmed issuance, select an appropriate representative filing.
+
+Prefer a source-backed final filing that confirms the issuance.
+
+Use the representative filing's SEC Filing Date for the reporting month.
+
+Do not silently use Pricing Date or Settlement Date.
+
+Preserve:
+
+```text
+representative_accession_number
+representative_filing_date
+related_accessions
+issuance_id
+```
+
+Where the representative filing is uncertain, flag the record for review.
+
+For filings near month or study-period boundaries, preserve the exact filing relationships and cutoff treatment.
+
+Do not silently count a preliminary October filing as a confirmed October issuance because the final document was filed in November.
+
+## 7.5 Counting flags
+
+Provide:
+
+```text
+raw_filing_count_flag
+unique_issuance_count_flag
+include_in_stage1
+duplicate_of
+review_reason
+```
+
+Each original filing may contribute at most once to raw filing count within its proper reporting scope.
+
+Each confirmed issuance event may contribute at most once to unique issuance count.
+
+Do not allow one issuance with multiple related filing records to inflate the result.
+
+Do not treat uncertain records as confirmed issuance events.
+
+---
+
+# 8. STAGE 1 CSV OUTPUT
+
+Produce:
+
+```text
+structured_notes_stage1_202501_202610.csv
+```
+
+This should be the main Stage 1 file uploaded to Stylus.
+
+Include sufficient information to calculate:
+
+- Monthly Raw Filing Count
+- Monthly Structured-Note Candidate Count
+- Monthly Confirmed Unique Issuance Count
+- Monthly Preliminary Filing Count
+- Monthly Duplicate Filing Count
+- Monthly Excluded Non-Structured Filing Count
+- Monthly Review-Required Count
+- Issuer-Level Classification Coverage
+- Issuer-Level Reconciliation Statistics
+
+Preserve source-level detail and counting flags.
+
+Do not pre-aggregate away all SEC accession information.
+
+Ensure each counted filing and issuance can be traced back to its source.
+
+### Important distinction
+
+If a large number of filings remain unresolved, do not call the confirmed issuance count a complete census.
+
+Provide coverage metrics and unresolved counts.
+
+The Stage 1 CSV must remain usable even if Stage 2 is not executed.
+
+---
+
+# 9. STAGE 2 — DOLLAR NOTIONAL EXTRACTION
+
+Stage 2 must build on the completed Stage 1 dataset.
+
+Do not restart the whole discovery process unnecessarily.
+
+Do not duplicate downloads already completed and cached.
+
+## 9.1 Main objective
+
+Extract actual structured-note issuance amounts from relevant SEC documents.
+
+The resulting Stage 2 dataset must support a Dollar Notional League Table.
+
+## 9.2 Supported source documents
+
+Inspect relevant:
+
+- Final Pricing Supplements
+- Relevant HTML filing documents
+- Structured HTML tables
+- Supporting exhibits
+- Other public SEC filing formats when practical
+
+Use structured parsing where possible.
+
+Prefer HTML-aware parsing, for example BeautifulSoup or pandas HTML table processing where appropriate.
+
+Avoid relying exclusively on raw HTML regex matching.
+
+Use targeted issuer-specific parsing rules where needed.
+
+## 9.3 Amount terminology
+
+Support extraction of:
+
+```text
+Aggregate Principal Amount
+Aggregate Principal Amount of Notes
+Principal Amount of Notes Offered
+Total Principal Amount
+Total Amount Issued
+Number of Notes
+Denomination per Note
+```
+
+And issuer-specific variations.
+
+Distinguish carefully between:
+
+- Actual final issuance amount
+- Note denomination
+- Number of notes
+- Preliminary offering amount
+- Maximum offering amount
+- Program or shelf amount
+- Outstanding principal
+- Aggregate amount across multiple securities
+- Incremental amount for a reopening
+
+### Critical example
+
+If a Pricing Supplement says:
+
+```text
+Principal Amount per Note: $1,000
+Number of Notes: 25,000
+Aggregate Principal Amount: $25,000,000
+```
+
+The issuance notional is:
+
+```text
+$25,000,000
+```
+
+Not:
+
+```text
+$1,000
+```
+
+Never confuse per-note denominations with total issuance.
+
+If the aggregate amount is absent but a supported calculation from final, clearly identified note quantity and denomination is available, record the calculation method and source evidence.
+
+Do not invent a quantity or infer issuance size from unsupported assumptions.
+
+## 9.4 Final versus preliminary amounts
+
+Prefer amounts supported by final pricing documentation.
+
+Do not treat indicative or preliminary notional as verified issuance.
+
+If only preliminary amounts exist, mark the amount unresolved.
+
+Do not assign zero merely because final notional is unavailable.
+
+## 9.5 Multiple CUSIPs and tranches
+
+One SEC document may contain several securities.
+
+Support separate issuance-event and tranche-level records where necessary.
+
+Do not assign an entire multi-tranche aggregate amount to each CUSIP.
+
+Where allocation cannot be determined, flag for review.
+
+## 9.6 Reopenings and additional issuances
+
+Distinct additional issuance events must be handled carefully.
+
+If a note is reopened or additional notes are issued under an existing CUSIP, do not automatically discard the additional issuance merely because the CUSIP already exists.
+
+Distinguish:
+
+```text
+Original Issuance
+Additional Issuance
+Reopening
+Amendment
+Duplicate Filing
+```
+
+Record incremental notional where reliable source evidence supports it.
+
+Never count the same principal amount twice.
+
+## 9.7 Currency
+
+Preserve:
+
+```text
+principal_amount_original
+currency
+principal_amount_usd
+fx_method
+fx_rate_date
+currency_validation_status
+```
+
+Do not assume every note is USD-denominated.
+
+Do not silently convert foreign-currency amounts.
+
+Use only a documented, explicitly enabled FX methodology if conversion is required.
+
+Otherwise, keep non-USD issuance separate and exclude it from confirmed USD notional totals.
+
+Use Decimal arithmetic for monetary values.
+
+---
+
+# 10. STAGE 2 — NOTIONAL VALIDATION
+
+Implement a transparent validation framework.
+
+Supported statuses:
+
+```text
+VALIDATED
+REVIEW_REQUIRED
+EXCLUDED
+NOT_AVAILABLE
+```
+
+## 10.1 Required validation checks
+
+Confirm:
+
+1. The source document belongs to the correct issuer.
+
+2. The filing corresponds to the correct issuance.
+
+3. The amount represents an actual issued or confirmed aggregate principal.
+
+4. The amount is not a per-note denomination.
+
+5. The amount is not an unrelated program or shelf size.
+
+6. Multiple monetary values within a document have been distinguished.
+
+7. Currency is known.
+
+8. The source is final or otherwise sufficient to confirm issuance.
+
+9. Reopenings and additional issues are correctly identified.
+
+10. Multiple filings do not duplicate the same notional.
+
+11. Multi-tranche amounts are not incorrectly allocated.
+
+12. The amount is reproducible from cited source evidence.
+
+If validation fails or information is insufficient, mark the record for review.
+
+Do not silently force a number into the final total.
+
+## 10.2 Audit evidence
+
+Preserve:
+
+```text
+amount_source_url
+amount_source_accession
+amount_source_document
+amount_raw_text
+amount_extraction_rule
+principal_amount_original
+currency
+principal_amount_usd
+amount_validation_status
+review_reason
+```
+
+Store large source excerpts locally where necessary rather than inflating the Stylus CSV.
+
+Use compact evidence references in the export.
+
+## 10.3 Notional counting flag
+
+Provide:
+
+```text
+notional_count_flag
+```
+
+Each confirmed economic issuance event should contribute its validated incremental amount exactly once.
+
+If multiple records refer to the same amount, only the appropriate counting record should contribute to the aggregate.
+
+Unresolved amounts must not become confirmed totals.
+
+---
+
+# 11. STAGE 2 CSV OUTPUT
+
+Produce:
+
+```text
+structured_notes_stage2_202501_202610.csv
+```
+
+The Stage 2 CSV should enrich the Stage 1 dataset with notional-related information.
+
+Preserve the same issuer universe and research period.
+
+Do not unexpectedly change the classification or counting logic between stages.
+
+Recommended fields include:
+
+```text
+issuer_group
+issuer_legal_entity
+cik
+filing_date
+filing_month
+form_type
+accession_number
+sec_url
+product_name
+product_category
+cusip
+pricing_date
+issue_date
+issuance_id
+representative_accession_number
+filing_classification
+classification_rule
+classification_confidence
+duplicate_of
+raw_filing_count_flag
+unique_issuance_count_flag
+include_in_stage1
+principal_amount_original
+currency
+principal_amount_usd
+amount_type
+amount_source_url
+amount_extraction_rule
+amount_validation_status
+notional_count_flag
+include_in_stage2
+review_reason
+```
+
+You may extend this schema where necessary.
+
+Maintain clear definitions for all count flags.
+
+Avoid unnecessary duplicate columns or large free-text blobs.
+
+The output must allow Stylus to calculate:
+
+- Monthly Issuer Notional
+- Monthly Market Share
+- Issuer Rankings
+- Issuance Count
+- Average Validated Notional per Issuance
+- Notional Coverage
+- Missing/Unresolved Amount Counts
+
+Do not present incomplete verified-notional totals as complete market issuance volume without qualification.
+
+---
+
+# 12. DATA STORAGE, CACHE, AND RESUME
+
+Stage 2 could require substantial SEC document retrieval.
+
+A previous high-level estimate suggested potentially 10–40 GB of raw HTML, but that figure has not been empirically validated.
+
+Do not treat it as a proven requirement.
+
+Design for efficient incremental processing.
+
+## 12.1 Local storage
+
+Use an organized local structure for:
+
+```text
+cache
+state
+output
+reports
+logs
+```
+
+Use SQLite or a comparable lightweight state store where beneficial.
+
+Avoid holding all downloaded HTML documents in memory simultaneously.
+
+## 12.2 Cache behavior
+
+Cache downloaded SEC metadata and source files.
+
+Use stable source identifiers.
+
+Avoid downloading the same document multiple times.
+
+Support:
+
+- Cache reuse
+- Incremental updates
+- Disk usage reporting
+- Configurable cache retention
+- Optional cache cleanup
+- Controlled reprocessing
+- Resume after interruption
+
+Do not delete raw files or audit evidence required for an in-progress validation run without appropriate confirmation or a documented retention policy.
+
+## 12.3 Execution determinism
+
+The same source data and configuration should produce identical classifications, issuance IDs, count flags, and financial totals.
+
+Maintain execution metadata, including:
+
+```text
+run_id
+run_timestamp
+configuration_version
+classifier_version
+parser_version
+source_cutoff
+```
+
+Avoid nondeterministic output ordering.
+
+---
+
+# 13. MONTHLY RECONCILIATION
+
+Provide a local reconciliation report for every issuer and every month in the 22-month period.
+
+Include months with no confirmed activity.
+
+## Stage 1 metrics
+
+```text
+raw_filing_count
+structured_candidate_count
+confirmed_unique_issuance_count
+preliminary_count
+duplicate_count
+non_structured_count
+review_required_count
+classification_coverage
+```
+
+## Stage 2 metrics
+
+```text
+validated_issuance_count
+validated_usd_notional
+missing_notional_count
+review_required_notional_count
+excluded_notional_count
+non_usd_issuance_count
+notional_validation_coverage
+```
+
+## Reconciliation requirements
+
+Provide a documented bridge from:
+
+```text
+Raw SEC Filings
+       |
+       v
+Relevant Filing Candidates
+       |
+       v
+Classified Structured Notes
+       |
+       v
+Unique Issuance Events
+       |
+       v
+Validated Dollar Notional
+```
+
+Each reduction or exclusion must have an explicit reason.
+
+Prevent double counting when one filing contains multiple instruments or multiple filings correspond to the same issuance.
+
+Never interpret failed retrievals as zero activity.
+
+If data collection is incomplete, flag the relevant issuer-month as incomplete.
+
+---
+
+# 14. AUTOMATED TESTING
+
+Implement tests using `pytest`.
+
+All core logic must be testable without live SEC network access.
+
+Create representative local fixtures.
+
+Do not require the corporate proxy or Kerberos credentials to run offline unit tests.
+
+## 14.1 Proxy and HTTP tests
+
+Test:
+
+- Proxy settings
+- Session configuration
+- Adapter mounting
+- Kerberos authentication initialization
+- Proxy header behavior using safe mocks
+- HTTP 407
+- HTTP 403
+- HTTP 429
+- TLS verification failures
+- Timeouts
+- Retry logic
+- Checkpoint recovery
+- Unexpected HTML responses
+
+Never include live Kerberos tickets or secrets in tests.
+
+## 14.2 SEC metadata tests
+
+Test:
+
+- Recent Submissions JSON
+- Historical pagination
+- Empty filing lists
+- Missing optional fields
+- Incorrect or invalid dates
+- Duplicate accession records
+- Start and end date boundaries
+- Multiple legal-entity mappings
+
+## 14.3 Classification tests
+
+Test:
+
+- Final 424B2
+- Preliminary 424B2
+- Amended Preliminary
+- Amended Final
+- FWP linked to Final
+- Non-structured 424B2
+- Uncertain filing
+- Incorrectly identified product title
+
+## 14.4 Deduplication tests
+
+Test:
+
+- Same CUSIP with Preliminary and Final
+- Multiple amendments
+- Multiple CUSIPs within one document
+- Same CUSIP with separate additional issuance
+- Missing CUSIP
+- Multiple legal entities
+- Cross-month filing relationships
+- Final filing outside the reporting cutoff
+- Conflicting identification evidence
+
+## 14.5 Notional tests
+
+Test:
+
+- $1,000 denomination versus $25 million total
+- Multiple amounts in a document
+- HTML tables
+- Missing notional
+- Preliminary-only amount
+- Multiple tranches
+- Non-USD instruments
+- Reopenings
+- Conflicting final amounts
+- Duplicated amounts from related filings
+
+## 14.6 Output tests
+
+Test:
+
+- CSV schema
+- Required fields
+- Stable issuance IDs
+- Stable count flags
+- Monthly aggregation
+- Exact date boundaries
+- Deterministic output
+- Missing-value handling
+- No double-counted issuance notional
+
+Create one end-to-end fixture that produces both Stage 1 and Stage 2 output.
+
+Do not claim tests passed unless they actually executed.
+
+---
+
+# 15. COMMAND-LINE INTERFACE
+
+Provide a simple CLI.
+
+Suggested modes:
+
+```text
+connectivity
+index
+classify
+notional
+validate
+export
+all
+```
+
+Example usage should be documented in README using the actual implemented CLI syntax.
+
+Support configuration for:
+
+- Selected Issuer Groups
+- Date Range
+- Sample Mode
+- Maximum Number of Documents
+- Resume Mode
+- Force Refresh
+- Output Directory
+- Cache Directory
+- Proxy Configuration
+- SEC User-Agent
+- CA Certificate Bundle
+- TLS Diagnostic Mode
+- Logging Level
+
+The default research window must remain:
+
+```text
+2025-01-01 through 2026-10-31
+```
+
+Use explicit full-run commands.
+
+Do not start an unrestricted full historical download simply because the application is executed with no arguments.
+
+Before a full run, display:
+
+```text
+Issuer Group Count
+Legal Entity / CIK Count
+Date Range
+Selected Forms
+Current Cache Coverage
+Planned Stage
+Output Directory
+Known Request Estimates
+```
+
+Do not present unmeasured runtime estimates as guaranteed.
+
+---
+
+# 16. IMPLEMENTATION SEQUENCE
+
+Implement the project in the following order.
+
+## Phase A — Existing script inspection
+
+1. Inspect the currently open Python source file.
+2. Identify the current SEC extraction functionality.
+3. Identify its CIK configuration.
+4. Identify date filtering and pagination behavior.
+5. Identify document download and parsing logic.
+6. Identify current CSV outputs and deduplication assumptions.
+7. Preserve a recoverable copy of the original script.
+8. Document the main defects and planned improvements.
+
+Do not unnecessarily delete useful existing logic.
+
+## Phase B — Corporate Proxy integration
+
+1. Implement the reusable SEC HTTP session.
+2. Use the actual Kerberos proxy reference code provided in Section 2.
+3. Preserve the working custom adapter approach.
+4. Add configurable SEC headers.
+5. Add corporate CA bundle support.
+6. Add timeout, retry, and rate limiting.
+7. Add diagnostic error handling.
+8. Implement connectivity mode.
+9. Run offline HTTP tests.
+10. If available and authorized, run a limited live SEC connectivity test.
+
+The successful BNY implementation is evidence that this authentication approach worked in the earlier environment.
+
+It is not proof that the SEC endpoints are currently reachable.
+
+## Phase C — Stage 1 implementation
+
+1. Implement Submissions API retrieval.
+2. Implement historical pagination.
+3. Validate CIK assignments.
+4. Build the raw filing inventory.
+5. Apply exact date and form filters.
+6. Implement selective document retrieval.
+7. Implement Structured Notes classification.
+8. Implement Preliminary/Final/Amendment relationships.
+9. Implement unique issuance matching.
+10. Implement safe deduplication.
+11. Implement count flags.
+12. Generate the Stage 1 CSV.
+13. Generate monthly reconciliation.
+14. Run all Stage 1 tests.
+
+## Phase D — Stage 2 implementation
+
+1. Reuse Stage 1 records and cached documents.
+2. Implement final pricing document retrieval.
+3. Implement HTML-aware extraction.
+4. Implement issuer-specific parsing rules.
+5. Extract principal amount and currency.
+6. Reconcile multiple amounts.
+7. Handle multiple tranches.
+8. Handle reopenings.
+9. Validate actual issuance notional.
+10. Implement notional count flags.
+11. Generate the Stage 2 CSV.
+12. Generate notional reconciliation.
+13. Run all Stage 2 tests.
+
+## Phase E — Controlled integration validation
+
+After completing offline tests:
+
+1. Test SEC connectivity.
+2. Select one issuer and one month.
+3. Retrieve actual SEC filings within a bounded request budget.
+4. Validate classification against real documents.
+5. Validate unique issuance counting.
+6. Validate several principal amounts against source documents.
+7. Review discrepancies.
+8. Correct rules and rerun affected tests.
+
+Do not automatically launch the full 13-issuer / 22-month collection.
+
+## Phase F — Complete implementation and handoff
+
+Produce:
+
+```text
+README.md
+requirements.txt
+Example configuration
+Issuer mapping
+Stage 1 implementation
+Stage 2 implementation
+CLI
+Automated tests
+CSV schemas
+Reconciliation methodology
+Proxy troubleshooting instructions
+Known limitations
+```
+
+Use a modest dependency set.
+
+Prefer compatibility with the existing local Python environment.
+
+If Python 3.8 compatibility is required, identify any required adjustments; otherwise prefer a currently supported Python version.
+
+---
+
+# 17. DATA-INTEGRITY RULES
+
+The following are non-negotiable.
+
+1. Never fabricate filing data.
+2. Never fabricate CUSIPs.
+3. Never fabricate principal amounts.
+4. Never treat all 424B2 filings as valid structured-note issuances.
+5. Never treat all FWPs as separate issuances.
+6. Never collapse all missing-CUSIP records.
+7. Never assume one CUSIP always means one issuance event.
+8. Never assume one filing contains only one security.
+9. Never infer actual issuance size from typical denominations.
+10. Never treat preliminary amounts as validated notional.
+11. Never double-count final and amended filings.
+12. Never double-count issuances across legal entities.
+13. Never silently replace missing financial values with zero.
+14. Never convert non-USD amounts without a defined FX methodology.
+15. Never remove source lineage from analytical records.
+16. Never classify uncertain cases as validated simply to produce complete totals.
+17. Never change SEC Filing Date as the reporting basis.
+18. Never add unidentified issuers to the original universe.
+19. Never claim that all US structured-note issuance is captured by EDGAR.
+20. Never report successful connectivity or tests without executing them.
+
+Preserve unresolved cases and quantify their effect on data coverage.
+
+Accuracy and traceability are more important than producing apparently complete output.
+
+---
+
+# 18. EXPECTED FINAL DELIVERABLES
+
+The final project must provide:
+
+### Deliverable A — Working Python SEC EDGAR extractor
+
+Includes:
+
+- Corporate Kerberos Proxy support
+- SEC API access
+- HTTP request management
+- Historical pagination
+- Classification
+- Issuance reconciliation
+- Notional extraction
+- Data validation
+- Checkpointing
+- Resume
+- CLI
+
+### Deliverable B — Stage 1 CSV
+
+```text
+structured_notes_stage1_202501_202610.csv
+```
+
+Contains source-backed filing classification and unique issuance counting.
+
+### Deliverable C — Stage 2 CSV
+
+```text
+structured_notes_stage2_202501_202610.csv
+```
+
+Contains validated structured-note issuance amounts and associated evidence.
+
+### Deliverable D — Reconciliation reports
+
+Provide monthly issuer-level bridges between:
+
+```text
+Raw Filings
+Structured Note Candidates
+Confirmed Unique Issuances
+Validated Notional
+```
+
+### Deliverable E — Automated tests
+
+All relevant tests must be executable locally.
+
+Report actual test results and limitations.
+
+### Deliverable F — Documentation
+
+Document:
+
+- Windows/VS Code setup
+- Installation of required Python libraries
+- Citi proxy configuration
+- Kerberos authentication
+- Corporate CA configuration
+- SEC User-Agent configuration
+- Connectivity testing
+- Stage 1 execution
+- Stage 2 execution
+- Resume after interruption
+- CSV field definitions
+- Classification rules
+- Deduplication rules
+- Financial validation rules
+- Known data limitations
+
+---
+
+# 19. FINAL EXECUTION INSTRUCTIONS
+
+You are operating in VS Code Copilot Agent Mode.
+
+Begin by inspecting the existing Python file.
+
+Then implement the complete project, starting with the verified proxy/Kerberos transport mechanism supplied in this prompt.
+
+Do not ask for the original BNY source file; the required proxy implementation is included above.
+
+Do not copy unrelated BNY headers or cookies.
+
+Do not substitute a generic authentication method without technical justification.
+
+Implement both stages.
+
+Work incrementally and run automated tests after each major component.
+
+Keep project files small, organized, and maintainable.
+
+Avoid creating excessive reports, duplicated documentation, or unnecessary dependencies.
+
+Do not silently launch an unrestricted production data collection.
+
+If SEC connectivity is unavailable, complete the implementation and offline tests, then document the blocker and provide the exact local command for the connectivity test.
+
+If actual SEC sample documents are accessible, validate the parser against them.
+
+Do not present fixture-generated data as real SEC output.
+
+**Continue implementation until both Stage 1 and Stage 2 code, tests, CLI, configuration, and documentation are complete, or until a concrete environment blocker prevents further work.**
+
+At the end, provide a concise handoff covering:
+
+1. Files created or modified.
+2. Verified proxy integration status.
+3. Test execution results.
+4. Stage 1 functionality.
+5. Stage 2 functionality.
+6. Actual sample-run results, if available.
+7. Remaining limitations.
+8. Exact commands to run connectivity, a small sample, Stage 1, and Stage 2.
+
+The final system must deliver a defensible SEC EDGAR Structured Notes market-intelligence dataset that can support competitor issuance-count and dollar-notional league tables.
+
+**Correctness, reproducibility, source evidence, and auditability take priority over apparent completeness.**
