@@ -1,513 +1,802 @@
-ASAP2 Parameter Management — 基于真实系统对象的案例与处理方案
+ASAP2 Parameter Management — Business Scenarios and Expected Handling
 
-我结合你上传的 ASAP_KNOWLEDGE_CONTEXT_20261025(3).md，重点检查了以下 ASAP2 能力：Global Functions、Deal/Group/Asset/Bond Objects、Periodic Data、Payment Inputs、Symbol Objects、Global Function Debugging，以及 Validation Errors。
+Purpose
 
-可以把各种情况归纳为 15 种 Parameter Dependency Scenarios。这些情况涵盖从直接传参、嵌套 GF、同名参数，到 Class State、跨 Period 数据和动态调用的主要问题。
+This document illustrates how an ASAP2 deal script may receive, derive, transform, reuse, or override input values across Global Functions, runtime objects, and class instances. Each scenario includes an illustrative code example, what an analyst should see, and the expected business handling.
 
-首先说明一个重要边界：
+Scope: Requirements and expected user experience, illustrated with Python/ASAP2-style snippets. This is not an implementation specification.
 
-deal.params["MaxRate"] 是我们之前讨论的新增功能，不是这份 ASAP2 Knowledge 已确认支持的现有 API。
+Important distinctions:
 
-当前文档已确认支持的是 deal.fieldname、deal.periodics[period].field、payment_inputs[name].InputValue、gf[...] 等访问方式。下面会明确区分现有系统能力和建议增加的功能。
+• Existing ASAP2 capabilities referenced here: gf Global Function calls, deal and deal.setup, deal.periodics[period], payment_inputs[name].InputValue, deal.get_index_value(), symbols[period] in supported scripts, periodic calculation data, and Global Function debugging.
+• Proposed capabilities, not confirmed as existing ASAP2 APIs: the Deal Settings table accessed as deal.params["MaxRate"], parameter discovery, cross-function comparison, analyst confirmation, source-to-result lineage, and impact reporting.
+• Illustrative functions: Fa, Fb, CalculateCoupon, ValidateCoupon, RateManager, and similar custom names are examples, not documented ASAP2 built-ins. Rates, balances, and thresholds below are hypothetical.
+• Terminology: configured value means a maintained business setting; received value means what a particular function call receives; effective value means what the function ultimately uses. These values may legitimately differ.
 
-一、统一的管理逻辑
+1. Summary of the Four Categories
 
-不论 Python Script 有多复杂，都应该把一个参数的生命周期理解为：
+|Category                      |Main question                                                         |Typical owner                        |Required management                                                   |
+|------------------------------|----------------------------------------------------------------------|-------------------------------------|----------------------------------------------------------------------|
+|**1. Configurable Inputs**    |What must an analyst set or approve for this deal?                    |Deal setup / analyst                 |Maintain values, scope, confirmation, and copy behavior               |
+|**2. System / Runtime Inputs**|What does ASAP2 supply at the relevant processing step?               |Existing system and periodic workflow|Identify exact source, deal, bond/asset, period, and availability     |
+|**3. Derived Inputs**         |Where was this value calculated, and where does it go next?           |Calculations and Global Functions    |Trace upstream inputs, transformations, and downstream consumers      |
+|**4. Function / Class State** |What does this specific function call or object instance actually use?|Function logic / runtime state       |Distinguish defaults, explicit arguments, overrides, and state changes|
 
-Source
+Fundamental business rule: Two parameters named MaxRate are not automatically the same parameter. Conversely, two different function arguments may legitimately reference one shared Deal Settings value. A difference is an error only when the applicable business rule requires the values to agree.
 
-Deal Settings · ASAP2 Objects · Literal · GF Output
+────────
 
-Binding
+2. Category 1 — Configurable Inputs
 
-哪个 Function、哪次调用、哪个参数接收它
+Values that the business intends to maintain at deal setup, typically with analyst confirmation. They should not be confused with every local variable or Global Function argument found in code.
 
-Transformation
+C1. One deal-level setting used by one function
 
-默认值 · 赋值 · 计算 · Override · Class Mutation
+Business situation: An RMBS deal has a contractual coupon cap of 5%.
 
-Consumer / Result
+# Proposed Deal Settings value:
+# MaxRate = 5.0, unit = percent
 
-Calculation · Validation · Bond Payment · Reporting
+coupon_cap = deal.params["MaxRate"]
+result = gf.Fa(MaxRate=coupon_cap)
 
-每个 Parameter 应当具有自己的 Source Identity。每次被 Function 使用时，另外记录独立的 Binding Identity。
+Expected handling:
 
-例如：
+• Show one MaxRate row in Deal Settings with value 5.0, unit percent, and analyst confirmation.
+• Show Fa.MaxRate as a consumer of that row.
+• Flag a missing value or incompatible type before setup validation completes.
 
-Source:
-    deal.params["MaxRate"]
-Bindings:
-    Fa@v2 / call #1 / MaxRate
-    Fb@v1 / call #1 / MaxRate
-    Fa@v2 / call #2 / MaxRate
+C2. Two functions share the same setting
 
-这样才可以准确比较 Fa(MaxRate) 和 Fb(MaxRate)，也可以区分同一个 Fa 的两次调用。
+Business situation: Both coupon calculation and coupon validation must use the same contractual cap.
 
-二、15 种实际场景：举例与对应处理
+max_rate = deal.params["MaxRate"]  # 5.0
 
-下面所有 Fa、Fb、ValidationEngine 示例均为说明拟议分析器而编写的示意代码；涉及现有 ASAP2 API 的案例会注明文档依据。
+coupon = gf.Fa(MaxRate=max_rate)
+check = gf.Fb(MaxRate=max_rate)
 
-Case 1 — Direct Parameter Passing
+Expected handling:
 
-显式参数
+• Maintain one Deal Settings value, not separate Fa.MaxRate and Fb.MaxRate configuration rows.
+• Show two usage records: Fa.MaxRate <- deal.params["MaxRate"] and Fb.MaxRate <- deal.params["MaxRate"].
+• If the analyst changes MaxRate, list both functions as potentially affected.
 
-gf.Fa(MaxRate=5)
-gf.Fb(MaxRate=7)
+C3. Same parameter name, intentionally different business meanings
 
-需要识别： 两个 Functions 都有 MaxRate 参数，但它们的实际 Binding Values 分别为 5 和 7。
+Business situation: Fa.MaxRate is a bond coupon cap; Fb.MaxRate is a separate index-rate cap.
 
-处理：
+# Two distinct approved business settings:
+# CouponMaxRate = 5.0%
+# IndexMaxRate  = 7.0%
 
-* 建立 Fa.MaxRate 和 Fb.MaxRate 两条 Binding Records。
-* 分别记录值、来源 LITERAL、调用位置。
-* 显示 Different Values；只有业务规则要求相同时才标为 Conflict。
+gf.Fa(MaxRate=deal.params["CouponMaxRate"])
+gf.Fb(MaxRate=deal.params["IndexMaxRate"])
 
-不需要自动把 5 和 7 添加到 Deal Settings。只有确定它们属于需要维护的业务配置时，才建议迁移。
+Expected handling:
 
-Case 2 — Function Default vs Explicit Override
+• Display both underlying business settings and their distinct purposes.
+• Compare the two MaxRate arguments without merging them by name.
+• Mark the relationship INDEPENDENT; different values are permitted.
+• Do not force the design to use function-specific parameter keys if general-purpose business names are clearer.
 
-默认参数
+C4. Same business rule, inconsistent input sources
 
-def Fa(MaxRate=5):
+Business situation: Both functions should use the deal cap, but one call hardcodes a different value.
+
+# Deal Settings: MaxRate = 5.0%
+
+gf.Fa(MaxRate=deal.params["MaxRate"])
+gf.Fb(MaxRate=7.0)  # Different source and value
+
+Expected handling:
+
+• Display Fa: source = Deal Settings, received value = 5.0%.
+• Display Fb: source = hardcoded literal, received value = 7.0%.
+• If the two are declared MUST_MATCH, flag a configuration inconsistency.
+• Provide the exact script/function usage and the value requiring review; do not silently replace 7.0.
+
+C5. Different bond-level limits within one deal
+
+Business situation: Senior and subordinate tranches have different contractual caps.
+
+# Proposed general-purpose Deal Settings keys:
+# A1MaxRate = 5.0%
+# B1MaxRate = 6.0%
+
+gf.Fa(bond=bonds["A1"], MaxRate=deal.params["A1MaxRate"])
+gf.Fa(bond=bonds["B1"], MaxRate=deal.params["B1MaxRate"])
+
+Expected handling:
+
+• Keep the settings separate by bond/class applicability.
+• Show that the same Global Function is invoked twice with different bond and parameter bindings.
+• Compare them as different scope, not as conflicting deal-wide values.
+• Identify which bonds are covered and whether any required class lacks a cap.
+
+C6. Time-dependent deal configuration
+
+Business situation: A cap changes from 5% to 6% beginning with payment period 25.
+
+# Proposed Deal Settings:
+# InitialMaxRate = 5.0
+# StepUpMaxRate  = 6.0
+# StepUpPeriod   = 25
+
+if period < deal.params["StepUpPeriod"]:
+    max_rate = deal.params["InitialMaxRate"]
+else:
+    max_rate = deal.params["StepUpMaxRate"]
+
+gf.Fa(MaxRate=max_rate)
+
+Expected handling:
+
+• Confirm all three settings and the contractual effective-period rule.
+• Display the applicable value for the selected period, not only the two stored values.
+• Show that period 24 and period 25 legitimately use different caps.
+• Flag missing step-up settings before they are needed by the applicable workflow.
+
+C7. Missing, unconfirmed, or invalid deal settings
+
+Business situation: The script references MaxRate, but setup is incomplete.
+
+# A required configured value is referenced by a function:
+gf.Fa(MaxRate=deal.params["MaxRate"])
+
+Expected handling:
+
+• Distinguish MISSING (no configured entry), UNCONFIRMED (value exists, analyst has not approved), and INVALID (wrong type/unit/range).
+• Do not treat 0 or False as missing solely because they are falsy.
+• Allow analysts to review the affected consumers before confirming the setting.
+• Apply agreed blocking/warning rules rather than treating every finding as a fatal error.
+
+C8. Copy Deal Info to a new deal
+
+Business situation: Deal B is created from Deal A, which has MaxRate = 5.0%.
+
+# Illustrative data after a Copy Deal Info operation:
+# Deal A: deal.params["MaxRate"] = 5.0
+# Deal B: deal.params["MaxRate"] = 5.0  (copied value)
+
+Expected handling:
+
+• Include the proposed Parameters table in Copy Deal Info.
+• Preserve parameter name, value, type, unit, scope, and applicable effective-period rules.
+• Clearly identify copied/inherited values in Deal B.
+• Require a new analyst confirmation for Deal B; do not automatically carry over Deal A’s approval.
+
+────────
+
+3. Category 2 — System / Runtime Inputs
+
+Values already supplied by ASAP2 deal, setup, bond, collateral, market, or periodic-processing objects. The management task is to verify source, scope, timing, and availability, not to add every field to Deal Settings.
+
+S1. Read-only deal metadata
+
+Business situation: The script applies rules based on the deal’s first payment date and shelf.
+
+first_pay_date = deal.FirstPayDate
+shelf_name = deal.Shelf
+
+# Illustrative rule, not an ASAP2 built-in:
+result = gf.Fa(first_pay_date=first_pay_date, shelf=shelf_name)
+
+Expected handling:
+
+• Classify both inputs as ASAP2 Deal Fields, not deal.params.
+• Show their source as deal.FirstPayDate and deal.Shelf.
+• Trace which function consumes them; direct any corrections to the established Deal Setup process.
+
+S2. Deal setup versus periodic data
+
+Business situation: A validation compares original balance to the current outstanding balance.
+
+original_balance = deal.setup.OrigBal
+current_balance = deal.periodics[period].EndSchBal
+
+check = gf.Fa(
+    original_balance=original_balance,
+    current_balance=current_balance
+)
+
+Expected handling:
+
+• Identify Deal Setup and Deal Periodic as different source categories.
+• Preserve the selected period for EndSchBal.
+• Avoid creating editable Deal Settings duplicates of existing system fields.
+
+S3. Current versus prior-period values
+
+Business situation: A balance-roll validation needs data from periods 64 and 65.
+
+prior_end_balance = deal.periodics[period - 1].EndSchBal
+current_end_balance = deal.periodics[period].EndSchBal
+
+gf.Fa(
+    prior_balance=prior_end_balance,
+    current_balance=current_end_balance
+)
+
+Expected handling:
+
+• Display EndSchBal / Period 64 and EndSchBal / Period 65 as separate source records.
+• Clearly identify relative-period references (period - 1 versus period).
+• Do not flag different balances as a parameter conflict simply because the field name matches.
+
+S4. Required payment input is missing
+
+Business situation: An analyst has not populated a required payment input for the current payment date.
+
+# Documented ASAP2-style object access:
+amount = payment_inputs["PayInNumR"].InputValue
+
+# Illustrative consuming function:
+gf.Fa(payment_amount=amount)
+
+Expected handling:
+
+• Classify the value as a Payment Input, not a new deal-level configuration parameter.
+• Show the payment date and whether the input is required.
+• Flag None when the required input is unavailable at the relevant processing step.
+• Keep this as a period-readiness check even when deal setup was validated earlier.
+
+Source nuance: ASAP2 documents that missing non-required Payment Inputs can default to 0, False, or None, while missing required inputs can return None and block Generate Bond Payment. The result depends on processing step and field type.
+
+S5. Optional payment input legitimately defaults to zero
+
+Business situation: No optional expense adjustment was submitted this month.
+
+optional_amount = payment_inputs["PayInNum"].InputValue
+
+gf.Fa(expense_adjustment=optional_amount)
+
+Expected handling:
+
+• Show 0 as a legitimate system-provided default when the input definition permits it.
+• Differentiate DEFAULT_APPLIED from MISSING_REQUIRED.
+• Do not create false errors for valid zero-valued inputs.
+
+S6. Same index, different source selection
+
+Business situation: Two functions obtain SOFR using different sourcing rules.
+
+rate_deal = deal.get_index_value("SOFR", deal_level=True)
+rate_global = deal.get_index_value("SOFR", deal_level=False)
+
+gf.Fa(index_rate=rate_deal)
+gf.Fb(index_rate=rate_global)
+
+Expected handling:
+
+• Show SOFR / Deal-level source for Fa and SOFR / Global-level source for Fb.
+• Display the index date and payment-date context when available.
+• Highlight differences in sourcing configuration without assuming that different rates are errors.
+• Note that deal_level=False is the documented default of deal.get_index_value().
+
+S7. Currency conversion depends on direction and scope
+
+Business situation: Two functions request the same currency conversion but with different flags.
+
+rate_a = deal.get_currency_conversion_rate(
+    "USD_EUR", deal_level=True, is_src_to_dest=True
+)
+rate_b = deal.get_currency_conversion_rate(
+    "USD_EUR", deal_level=False, is_src_to_dest=False
+)
+
+gf.Fa(fx_rate=rate_a)
+gf.Fb(fx_rate=rate_b)
+
+Expected handling:
+
+• Display both source scope (deal/global) and conversion direction.
+• Treat different results as expected unless their specified business relationship requires a match.
+• Do not infer that matching conversion names imply identical inputs.
+
+────────
+
+4. Category 3 — Derived Inputs
+
+Values produced by calculations, Global Functions, waterfall logic, or stored calculation outputs. They should generally be traceable rather than maintained manually.
+
+D1. Simple rate conversion
+
+Business situation: Deal Settings stores a percentage as 5.0, while a function requires decimal-rate units.
+
+max_rate_percent = deal.params["MaxRate"]  # 5.0
+max_rate_decimal = max_rate_percent / 100.0  # 0.05
+
+gf.Fa(max_rate=max_rate_decimal)
+
+Expected handling:
+
+• Show configured value 5.0 percent and derived value 0.05 decimal separately.
+• Record the conversion rather than reporting a value mismatch.
+• Flag a unit mismatch if a consumer expects percent but receives decimal (or vice versa).
+
+D2. Same source, different approved transformations
+
+Business situation: Two functions apply different contractual adjustments to the same cap.
+
+cap = deal.params["MaxRate"]  # 5.0%
+
+coupon_cap = cap
+elevated_threshold = cap + 1.0
+
+gf.Fa(MaxRate=coupon_cap)       # 5.0%
+gf.Fb(MaxRate=elevated_threshold)  # 6.0%
+
+Expected handling:
+
+• Display one source feeding two derived branches.
+• Explain Fb’s +1 percentage-point adjustment.
+• Do not flag a conflict if the different transformations are approved business rules.
+
+D3. One Global Function’s output becomes another’s input
+
+Business situation: Coupon validation relies on a calculated rather than manually entered coupon.
+
+coupon = gf.CalculateCoupon(
+    index_rate=deal.get_index_value("SOFR"),
+    spread=deal.params["Spread"]
+)
+
+result = gf.ValidateCoupon(
+    coupon=coupon,
+    MaxRate=deal.params["MaxRate"]
+)
+
+Expected handling:
+
+• Show two upstream inputs for CalculateCoupon: index source and spread setting.
+• Show CalculateCoupon.output -> ValidateCoupon.coupon.
+• Treat coupon as DERIVED, not a missing Deal Settings field.
+
+D4. Nested Global Functions across several levels
+
+Business situation: A top-level validation uses nested functions to calculate its threshold.
+
+# Illustrative custom Global Functions:
+def Fc(spread):
+    return spread + 0.25
+
+def Fb(spread):
+    return gf.Fc(spread=spread)
+
+def Fa(spread):
+    return gf.Fb(spread=spread)
+
+# In a deal script:
+threshold = gf.Fa(spread=deal.params["Spread"])
+
+Expected handling:
+
+• Show the complete dependency path Spread -> Fa -> Fb -> Fc -> threshold.
+• Surface required external inputs discovered within nested functions.
+• Count the shared source only once in the analyst-managed inventory, but preserve each function binding.
+• Distinguish a detected recursive-call cycle from a proven runtime failure.
+
+D5. Actual ASAP2 cumulative loss calculation
+
+Business situation: A Global Function computes cumulative realized loss using historical and current subpool data. The following follows the example in the ASAP manual.
+
+def agg_cumm_real_loss(subpool):
+    prior = (
+        subpool.periodics[period - 1].CumRealLoss
+        if period > 1 else 0
+    )
+    current = subpool.periodics[period]
+    return (
+        prior
+        + current.RealLossTotal
+        + current.TrailingRealLoss
+        + current.Other24
+    )
+
+# In the deal script:
+subpool = groups[1].subpools[0]
+loss = gf["agg_cumm_real_loss"](subpool)
+
+Expected handling:
+
+• Show the prior-period CumRealLoss and all three current-period source fields.
+• Show the cumulative loss as DERIVED from those fields.
+• Record the subpool, period, and function version.
+• Do not require an analyst to maintain loss as a Deal Settings parameter.
+
+D6. Waterfall variable consumed by validation/reporting
+
+Business situation: A waterfall creates a value that is later read by an eligible downstream script.
+
+# Waterfall script:
+CalculatedAvailableFunds = 1000000
+
+# Bond Validation or Reporting script (where symbols are supported):
+amount = symbols[period]["CalculatedAvailableFunds"]
+result = gf.Fa(available_funds=amount)
+
+Expected handling:
+
+• Show Waterfall / CalculatedAvailableFunds as the origin.
+• Show symbols[period] as the downstream access path.
+• Include period and script-stage context.
+• Avoid treating CalculatedAvailableFunds as a setup parameter.
+
+D7. Persisted calculation output read in a later script
+
+Business situation: A periodic calculation is saved and later used by reporting.
+
+# Periodic calculation writes a named result using ASAP2's
+# documented write_calc_data capability (arguments omitted here).
+
+# Later, a reporting script reads stored calculation records:
+for item in deal.periodics[period].get_calc_datas():
+    if item.CalcName == "RateTest":
+        result = item.CalcValues
+
+Expected handling:
+
+• Show the calculation name, period, and stored output as the data source.
+• Where available, identify which upstream calculation wrote the record.
+• Distinguish stored output from a value newly calculated in the current function invocation.
+
+D8. Return value is produced but not assigned
+
+Business situation: A function computes an updated available amount, but the script does not retain it.
+
+available_funds = 100.0
+
+gf.Fa(available_funds=available_funds)  # Returned value ignored
+
+gf.Fb(available_funds=available_funds)  # Still receives 100.0
+
+Expected handling:
+
+• Show that Fa was called but its return was not bound to the later input.
+• Highlight a POTENTIALLY_UNUSED_RETURN for review when the result is expected to be used.
+• Do not assume that calling a function automatically updates a local numeric variable.
+
+────────
+
+5. Category 4 — Function / Class State
+
+Values associated with individual function calls, defaults, internal assignments, class instances, and conditional behavior. The key business question is: What did this specific consumer actually use?
+
+F1. Default parameter is used
+
+Business situation: The script does not supply MaxRate; the function uses its own default.
+
+def Fa(MaxRate=5.0):
     return MaxRate
-gf.Fa()          # Uses default 5
-gf.Fa(MaxRate=7) # Explicit override 7
 
-需要识别： Default Value 与 Actual Bound Value 不一定相同。
+result = gf.Fa()  # Effective input = 5.0
 
-处理： 分开记录 default_value=5、binding_type=DEFAULT/EXPLICIT、effective_input=5/7。
+Expected handling:
 
-如果 Function Version 改变，默认值从 5 变成 6，需要重新评估所有依赖默认值的调用，而不是所有调用都重新审核。
+• Display Fa.MaxRate: default = 5.0, explicit argument = none, received value = 5.0.
+• Mark DEFAULT_USED; do not describe the value as coming from Deal Settings.
+• Identify the function version that defines the default.
 
-Case 3 — Shared Deal Parameter
+F2. Explicit argument overrides the function default
 
-共享配置
+Business situation: Fa defaults to 5%, but the deal script explicitly sends 7%.
 
-gf.Fa(MaxRate=deal.params["MaxRate"])
-gf.Fb(MaxRate=deal.params["MaxRate"])
+def Fa(MaxRate=5.0):
+    return MaxRate
 
-假设 Deal Settings 中 MaxRate = 5。
+result = gf.Fa(MaxRate=7.0)
 
-需要识别： 两个独立的 Function Parameters 使用同一个 Source。
+Expected handling:
 
-处理：
+• Show default = 5.0, received = 7.0, effective = 7.0.
+• Identify source = explicit literal, not a changed function default.
+• A default/actual difference is informational unless a business rule prohibits the override.
 
-* 在 Deal Settings 只维护一项 MaxRate。
-* 在 Lineage 中显示两个 Consumers。
-* 修改配置时，报告受影响的 Functions、Scripts 和 Portfolios。
-* 分别保留函数内部转换后的值，不因共享 Source 就自动合并 Effective Values。
+F3. Function reassigns a local parameter
 
-这是你希望 deal.params 实现的最基础、也最重要的业务功能。
-
-Case 4 — Same Parameter Name, Different Sources
-
-需要区分身份
-
-gf.Fa(MaxRate=deal.params["MaxRate"])
-gf.Fb(MaxRate=bonds["A1"].setup.MaxRate)
-
-第二个 MaxRate 是假设字段，用于演示同名不同来源。
-
-需要识别： MaxRate 这个名字相同，但 Source Scope 分别为 Deal 和 Bond。
-
-处理： 按完整 Source Path 分类，不按 Parameter Name 去重。
-
-DEAL / MaxRate
-BOND / A1 / MaxRate
-
-如果业务上要求 Bond Cap 与 Deal Cap 相同，可以建立 MUST_MATCH 规则；否则它们是两个独立参数。
-
-现有 ASAP2 Scripting Manual 已确认通过 bonds[bondname].setup 访问 Bond Setup 对象，但是否存在名为 MaxRate 的具体字段，应以实际字段目录为准。
-
-Case 5 — Same Source, Different Calculations
-
-派生值
+Business situation: A function receives a rate of 5%, then changes the local variable before a check.
 
 def Fa(MaxRate):
-    return MaxRate / 100.0
-def Fb(MaxRate):
-    return (MaxRate + 1.0) / 100.0
+    received = MaxRate       # 5.0
+    MaxRate = MaxRate + 1.0  # 6.0
+    return MaxRate
 
-假设两者收到的都是 5：
+result = gf.Fa(MaxRate=5.0)
 
-Fa.MaxRate input = 5
-    -> output = 0.05
-Fb.MaxRate input = 5
-    -> output = 0.06
+Expected handling:
 
-处理： Source 和 Argument Binding 分别记录，再为各自的 Transformation 建立下游节点。
+• Show received value = 5.0 and effective value = 6.0.
+• Classify the change as LOCAL_TRANSFORMATION.
+• Do not claim that the original Deal Settings value was modified.
 
-这里没有参数冲突，只有不同计算规则。
+F4. Conditional override
 
-如果两者原本要求输出一致，才需要另设 Calculation Consistency Validation。
+Business situation: A trigger event causes a special cap to apply.
 
-Case 6 — Nested Global Functions
+def Fa(MaxRate, trigger_active):
+    if trigger_active:
+        MaxRate = 7.0
+    return MaxRate
 
-递归依赖
+result = gf.Fa(MaxRate=5.0, trigger_active=True)
 
-def Fa(MaxRate):
-    adjusted = gf.Fb(MaxRate)
-    return adjusted * 1.1
+Expected handling:
 
-这里 Fa 的计算依赖 Fb 的输出。Fb 又可能继续调用其他 Global Functions。
+• Show configured/received value = 5.0 and observed effective value = 7.0 for this invocation.
+• Show the condition (trigger_active=True) that selected the alternate value.
+• Review whether the alternate value is contractually authorized.
+• When only source analysis is available, display conditional possibilities rather than a fabricated actual value.
 
-处理： 递归展开依赖关系，而不是只看到最外层的 Fa(MaxRate)。
+F5. Different class instances hold different values
 
-MaxRate
-  -> Fa.MaxRate
-      -> Fb.MaxRate
-          -> Fb.output
-      -> Fa.output
-
-实际 ASAP2 文档已有类似的 GF 计算案例：gf['agg_cumm_real_loss'] 通过读取 Subpool 的 prior-period 和 current-period 数据计算累计损失。它可以直接成为另一个 Function 的上游数据源。
-
-遇到递归循环时应终止静态展开并标记 POTENTIAL_CYCLE，不能无限扫描。
-
-Case 7 — Local Variable Reassignment
-
-变量重新赋值
-
-max_rate = 5
-max_rate = max_rate + 1
-max_rate = max_rate / 100
-
-处理： 使用类似 SSA 的逻辑记录不同赋值版本：
-
-max_rate#1 = 5
-max_rate#2 = 6
-max_rate#3 = 0.06
-
-不需要在 Deal Settings 建立三项 MaxRate。这些只是同一个 Function 内部的计算过程。
-
-ASAP2 Knowledge 还有一个很有价值的实际案例：
-
-gf.PayIntProrata(
-    Certs_Grp1,
-    by="intdue",
-    ida=AvailDistAmt_Grp1
-)
-
-文档指出，如果不把 Function 的返回值重新赋给 AvailDistAmt_Grp1，这个本地变量会保持原值，而且可能没有 Runtime Error。正确模式是：
-
-AvailDistAmt_Grp1 = gf.PayIntProrata(
-    Certs_Grp1,
-    by="intdue",
-    ida=AvailDistAmt_Grp1
-)
-
-这说明 Lineage 除了参数传递，还必须识别 Returned Value 是否被 Consumer 使用。否则会产生一种危险情况：代码执行成功，但后续计算继续使用旧值。
-
-Case 8 — Class Attributes and Object State
-
-对象状态
+Business situation: Two rate managers apply different caps to different tranches.
 
 class RateManager(object):
     def __init__(self, MaxRate):
         self.MaxRate = MaxRate
-    def calculate(self, rate):
+
+    def cap(self, rate):
         return min(rate, self.MaxRate)
-manager = RateManager(5)
-result_a = manager.calculate(6)
-manager.MaxRate = 7
-result_b = manager.calculate(6)
 
-需要识别： self.MaxRate 是同一个 Object Instance 的可变属性，发生过 State Mutation。
+senior = RateManager(5.0)
+subordinate = RateManager(7.0)
 
-处理：
+senior_rate = senior.cap(6.0)         # 5.0
+subordinate_rate = subordinate.cap(6.0)  # 6.0
 
-* 将 RateManager 的实例与 RateManager.MaxRate 属性分开标识。
-* 追踪 Constructor Binding 和后续 Assignment。
-* 实际执行时可记录 before=5、after=7。
-* 如果不同 instances 使用不同值，不应把它们合并。
+Expected handling:
 
-对于动态 Class State，静态分析可能只能识别潜在赋值，无法保证恢复完整的执行状态。
+• Distinguish senior.MaxRate from subordinate.MaxRate.
+• Show each instance’s business scope and initialization source.
+• Do not treat instance-level differences as conflicts without a matching requirement.
 
-建议让自定义 Class 支持只读 Dependency Contract，作为静态扫描的补充。
+F6. An existing class instance changes state
 
-Case 9 — ASAP2 Function Input Source Selection
+Business situation: The same rate manager changes its cap between calculations.
 
-来源容易混淆
+manager = RateManager(5.0)
+first_result = manager.cap(6.0)  # 5.0
 
-这是 Knowledge 中一个特别适合用来说明 Parameter Comparison 的真实案例：
+manager.MaxRate = 7.0
+second_result = manager.cap(6.0) # 6.0
 
-rate_a = deal.get_index_value(
-    "SOFR",
-    deal_level=True
-)
-rate_b = deal.get_index_value(
-    "SOFR",
-    deal_level=False
-)
+Expected handling:
 
-两个调用使用完全相同的 Index Name，但 deal_level 的取值不同。
+• Show state before and after the assignment where observed.
+• Distinguish the first and second consumer results.
+• Flag an unexpected state change for business review.
+• Do not attribute the change to Deal Settings unless that source was actually updated.
 
-根据 Scripting Manual，deal.get_index_value() 的 deal_level 默认值为 False，用于区分 Deal-Level 和 Global-Level Index Source。
+F7. Same function called twice with different bindings
 
-处理： 在 Parameter Comparison 中必须显示 Function Arguments，尤其是能够影响 Source Selection 的参数。
+Business situation: The same validation is used for two bond classes.
 
-Function: deal.get_index_value
-Call A:
-    index_name = SOFR
-    deal_level = True
-    source = Deal-Level Index
-Call B:
-    index_name = SOFR
-    deal_level = False
-    source = Global-Level Index
+gf.Fa(MaxRate=5.0, bond=bonds["A1"])
+gf.Fa(MaxRate=7.0, bond=bonds["B1"])
 
-即使两次返回的数值碰巧相同，也不能视为相同来源。
+Expected handling:
 
-另一个类似案例是 deal.get_currency_conversion_rate()。其 deal_level 和 is_src_to_dest 分别影响 Rate Source 和兑换方向，因此应作为调用语义的一部分进行追踪。
+• Show two distinct calls, even though both invoke Fa.
+• Include bond, script location, parameter values, and any available execution context.
+• Do not collapse both entries into a single Fa.MaxRate value.
 
-Case 10 — Current vs Prior Period Data
+F8. Same function, different approved/debug versions
 
-时间作用范围
+Business situation: The approved Global Function defaults to 5%, while a temporary debug copy uses 6%.
 
-prior_balance = deal.periodics[period - 1].EndSchBal
-current_balance = deal.periodics[period].EndSchBal
+# Illustrative difference between two versions:
+# Approved Fa v1: def Fa(MaxRate=5.0): ...
+# Debug copy:    def Fa(MaxRate=6.0): ...
 
-这是 ASAP2 已有的 Periodic Object 访问模式；EndSchBal 是 Scripting Manual 中列出的 Deal Periodic Field。
+result = gf.Fa()  # Depends on the selected execution version
 
-处理： Parameter Identity 必须包含 Period。
+Expected handling:
 
-Deal A / Period 64 / EndSchBal
-Deal A / Period 65 / EndSchBal
+• Show which function version was selected for the analysis or execution.
+• Keep approved and debug results separate.
+• Re-review implicit defaults when the applicable approved version changes.
+• Never merge debug observations into production evidence without an explicit distinction.
 
-不能只存：
+Source nuance: ASAP2’s documented Global Function Debugging creates a temporary editable copy from the latest approved version in the deal-script context and distinguishes debug workflow steps.
 
-EndSchBal = 100000
+F9. Dynamic call selected from a validation portfolio
 
-否则系统无法区分 Current、Prior 和 Historical Values。
+Business situation: A portfolio manager selects which registered Global Functions to run.
 
-如果 Function 使用 period-1，Lineage 应记录 Relative Period Expression，运行时再解析实际 Period。
+# Illustrative custom registry, not an ASAP2 built-in:
+registry = {
+    "coupon_check": "Fa",
+    "balance_check": "Fb"
+}
 
-Case 11 — Required vs Optional Payment Inputs
+for key in ["coupon_check", "balance_check"]:
+    function_name = registry[key]
+    function = getattr(gf, function_name)
+    result = function()
 
-需要运行时检查
+Expected handling:
 
-这是 Knowledge 中已经明确存在的机制：
+• Show the portfolio/registry selection that led to each Function Call.
+• List the resolved functions when the registry mapping is available.
+• If a runtime-selected function cannot be determined, mark UNRESOLVED_DYNAMIC_CALL rather than MISSING_PARAMETER.
 
-payment_inputs["PayInNumR"].InputValue
-payment_inputs["PayInFlagR"].InputValue
-payment_inputs["PayInDateR"].InputValue
+F10. A parameter is received but not used
 
-Scripting Manual 指出：
+Business situation: Fa receives 5%, but its calculation uses a separate fixed value.
 
-* 非必需的 Payment Input，在缺失时可能返回 0、False 或 None。
-* 必需的 Payment Input 缺失时，可能返回 None。
-* 当执行 Generate Bond Payment 时，系统会阻止缺失必需 Payment Inputs 的处理。
+def Fa(MaxRate):
+    internal_cap = 7.0
+    return internal_cap
 
-处理： Pre-Validation 必须根据 required、Data Type、Period 和 Processing Step 判断，而不能简单用 if not value。
+result = gf.Fa(MaxRate=5.0)
 
-例如：
+Expected handling:
 
-Payment Input A
-    required = False
-    value = 0
-    status = VALID_DEFAULT
-Payment Input B
-    required = True
-    value = None
-    status = MISSING_REQUIRED
+• Show Fa.MaxRate was supplied but did not influence the returned value in the examined path.
+• Flag POTENTIALLY_UNUSED_ARGUMENT for review.
+• Do not automatically conclude a business error: the parameter may be used in another conditional path.
 
-这里也说明你之前提出的 Setup Pre-Validation 应区分两类：
+────────
 
-* Setup 阶段检查 Parameter Definition 和固定 Deal Configurations。
-* Periodic 阶段检查当期必需输入是否已提供。
+6. Cross-Category Examples: End-to-End Business Review
 
-只在 Setup 检查一次，并不能保证后续所有 Payment Periods 的 Input Readiness。
+Example A. Comparing Fa(MaxRate) and Fb(MaxRate)
 
-Case 12 — User-Defined Variables and Symbol Objects
+# Proposed Deal Settings:
+# MaxRate       = 5.0%
+# IndexMaxRate  = 7.0%
 
-脚本变量共享
+gf.Fa(MaxRate=deal.params["MaxRate"])
+gf.Fb(MaxRate=deal.params["IndexMaxRate"])
 
-ASAP2 提供了通过 Symbol Object 读取 Waterfall Script 变量的方式：
+|Comparison field         |Fa.MaxRate              |Fb.MaxRate                   |
+|-------------------------|------------------------|-----------------------------|
+|Parameter name           |MaxRate                 |MaxRate                      |
+|Source                   |`deal.params["MaxRate"]`|`deal.params["IndexMaxRate"]`|
+|Configured/received value|5.0%                    |7.0%                         |
+|Business purpose         |Coupon cap              |Index cap                    |
+|Required relationship    |Independent             |Independent                  |
+|Expected status          |Valid                   |Valid                        |
 
-# Waterfall Script
-a = 10
-# Supported downstream script context
-value = symbols[period]["a"]
+Required business outcome: A user can compare the two bindings side by side and see why they differ. The system does not infer an error from the common parameter name.
 
-Scripting Manual 明确描述了 symbols[period][variable_name]，同时规定了 Symbol Object 的适用脚本范围。
+Example B. One source, different effective values
 
-处理：
+cap = deal.params["MaxRate"]  # 5.0%
 
-Source:
-    Waterfall Script / Variable a
-Published As:
-    symbols[period]["a"]
-Consumer:
-    Bond Validation / Reporting
+gf.Fa(MaxRate=cap)
+gf.Fb(MaxRate=cap + 1.0)
 
-这不是一个新的 Deal Settings Parameter，而是跨脚本传递的 Computed / Runtime Value。
+|Comparison field|Fa.MaxRate  |Fb.MaxRate                     |
+|----------------|------------|-------------------------------|
+|Shared source   |Deal MaxRate|Deal MaxRate                   |
+|Source value    |5.0%        |5.0%                           |
+|Transformation  |None        |+1 percentage point            |
+|Received value  |5.0%        |6.0%                           |
+|Expected status |Valid       |Valid if adjustment is approved|
 
-如果另一个 Function 也定义了局部变量 a，不能仅凭名称把它当成同一个 Symbol。
+Required business outcome: Preserve one configured source while showing two distinct downstream transformations.
 
-Case 13 — Calculated Data Persisted Across Scripts
+Example C. Cross-function mismatch requiring review
 
-持久化计算结果
+# Contractual business rule: both checks MUST use the deal cap.
 
-ASAP2 支持通过 write_calc_data 将数据写入 PeriodicCalc，并通过以下方式读取：
+gf.Fa(MaxRate=deal.params["MaxRate"])  # 5.0%
+gf.Fb(MaxRate=7.0)                     # 7.0%
 
-for item in deal.periodics[period].get_calc_datas():
-    print(item.CalcName, item.CalcValues)
+Required business outcome: Flag MUST_MATCH_VIOLATION, identify both bindings and source paths, and direct the analyst to the inconsistent call/configuration. The system must not silently harmonize values.
 
-这属于文档中已确认的 Deal-Periodic Calculation Data Access。
+Example D. Setup complete, current-period input missing
 
-处理： Lineage 不仅记录 Python Function Return，还要记录 Data Persistence Boundary。
+# A configured deal assumption exists:
+max_rate = deal.params["MaxRate"]
 
-Calculation Function
-    -> write_calc_data
-        -> PeriodicCalc / Deal / Period / CalcName
-            -> get_calc_datas
-                -> Reporting Function
+# A required value for the current payment date is absent:
+payment_adjustment = payment_inputs["PayInNumR"].InputValue
 
-不能假设一个下游 Function 读取到的数据一定来自当前执行刚完成的上游 Function。系统还需要记录实际数据所属 Period、写入/更新信息，以及在可获得时关联到相应的执行记录。
+gf.Fa(MaxRate=max_rate, adjustment=payment_adjustment)
 
-这也是你后续想实现 Audit / Reproducibility 时需要的机制。
+Required business outcome: Report deal configuration as confirmed but current-period readiness as incomplete. Setup approval must not be presented as proof that every future payment date has complete payment inputs.
 
-Case 14 — Dynamic Function Calls and ValidationEngine
+Example E. Nested calculation feeds reporting and validation
 
-动态解析
-
-你的现有架构类似于：
-
-function_name = validation_meta["gf_function_name"]
-func = getattr(gf, function_name)
-result = func(
-    runtime_context=bonds,
-    include_results=False
+# Illustrative custom functions:
+coupon = gf.CalculateCoupon(
+    index_rate=deal.get_index_value("SOFR"),
+    spread=deal.params["Spread"]
 )
 
-这里静态扫描未必能仅通过 getattr() 判断最终调用哪个 GF。
+validation_result = gf.ValidateCoupon(
+    coupon=coupon,
+    MaxRate=deal.params["MaxRate"]
+)
 
-处理：
+Expected dependency view:
 
-* 支持读取 ValidationEngine 的内部 Registry。
-* 根据 portfolio_key 展开对应 Validation Keys。
-* 再根据 gf_function_name 解析实际 GF。
-* 在 Call Graph 中保留 portfolio → validation → gf 的关系。
+SOFR index (ASAP2 runtime) ------+
+                                 +--> CalculateCoupon --> coupon --> ValidateCoupon
+Spread (Deal Settings) ----------+                               ^
+                                                                 |
+MaxRate (Deal Settings) ------------------------------------------+
 
-如果 function_name 由运行时动态生成，而且 Registry 也无法提供完整映射，则显示 UNRESOLVED_DYNAMIC_CALL。
+Required business outcome: The analyst confirms Spread and MaxRate; the system traces SOFR and calculated coupon without asking the analyst to enter those derived/runtime values into Deal Settings.
 
-这不应直接当成一个 Missing Deal Parameter。
+────────
 
-Case 15 — Function Versions and Cross-Deal Usage
+7. Expected User Views and Review Outcomes
 
-版本与适用范围
+A. Deal Settings — Configurable Inputs
 
-假设：
+The analyst should see only values that the business has chosen to manage as deal configuration.
 
-Deal A -> gf.Fa (Approved v1)
-Deal B -> gf.Fa (Approved v1)
-Debug Session -> gf.Fa (Modified test version)
+|Parameter   |Value|Unit   |Applicability|Analyst confirmed?|Used by           |
+|------------|----:|-------|-------------|------------------|------------------|
+|MaxRate     |5.0  |percent|Deal-wide    |Yes               |Fa, Fb            |
+|IndexMaxRate|7.0  |percent|Index checks |Yes               |Fb                |
+|A1MaxRate   |5.0  |percent|Bond A1      |Yes               |Fa / A1 call      |
+|StepUpPeriod|25   |period |Deal-wide    |No                |Coupon calculation|
 
-ASAP2 Knowledge 已确认 Global Function Debugging 会使用最新 approved version 创建调试副本，并允许在特定 Deal Script 内进行临时测试。系统还会标识 Debug Mode Workflow Steps。
+Requirements: Copy Deal Info must copy these entries as appropriate, but the target deal’s analyst confirmations should be reset or require fresh approval. Each value should show where it is used and which business rule governs it.
 
-另外，现有 Global Function Management 提供 Export Usages，可以导出 Deal 和 Global Function 的直接使用关系。
+B. Dependency Explorer — All Inputs
 
-处理：
+Show discovered inputs without implying that all are editable Deal Settings parameters.
 
-* Lineage 记录 GF Version 和 Execution Mode。
-* Approved 与 Debug Versions 分开分析。
-* 使用现有 Export Usages 作为 Deal-to-GF Mapping 的初始数据来源。
-* 对通过 ValidationEngine 间接调用的 GFs，额外展开其 Portfolio Registry。
+|Example input      |Category            |Source                      |Expected review              |
+|-------------------|--------------------|----------------------------|-----------------------------|
+|MaxRate            |Configurable        |Deal Settings               |Configured? Confirmed?       |
+|FirstPayDate       |Runtime             |Deal                        |Correct deal?                |
+|EndSchBal          |Runtime             |Deal periodic / period      |Correct period? Available?   |
+|PayInNumR          |Runtime             |Payment Input / payment date|Required? Missing?           |
+|coupon             |Derived             |CalculateCoupon output      |Upstream dependency complete?|
+|RateManager.MaxRate|Function/Class State|Object instance             |Initial value? Mutation?     |
 
-这样才可以回答：
+C. Cross-Function Parameter Comparison
 
-“如果我修改 gf.Fa，哪些 Deals 及 Portfolios 可能受到影响？”
+The user should be able to select a parameter name (for example, MaxRate) and inspect every matching function definition, call site, and runtime binding independently.
 
-注意，Export Usages 已确认的能力不能直接等同于完整 Nested Dependency Coverage，后者仍需要新增分析逻辑。
+At minimum, display:
 
-三、最终如何在 UI 中管理这些情况？
+|Field                    |Why it matters                                                       |
+|-------------------------|---------------------------------------------------------------------|
+|Function and version     |Identifies which rule defines the parameter                          |
+|Call site and context    |Separates repeated calls and different bonds/periods                 |
+|Formal parameter name    |Shows the receiving function’s argument                              |
+|Default value            |Detects implicit defaults                                            |
+|Bound source             |Distinguishes deal config, runtime field, literal, and derived output|
+|Received value           |Shows the value handed into that invocation                          |
+|Effective value, if known|Shows local adjustment or override                                   |
+|Business relationship    |`INDEPENDENT`, `MUST_MATCH`, `DERIVED_FROM`, or `UNKNOWN`            |
+|Review outcome           |`VALID`, `REVIEW`, `MISSING`, `UNCONFIRMED`, or `UNRESOLVED`         |
 
-我建议不是建立一个显示所有 Python Variables 的大表，而是通过两个互相关联的视图管理。
+D. Pre-Validation Review
 
-View A — Parameter Inventory
+Proposed user entry point: A Pre-Validation action next to Run Setup, also available as an automatic component of Setup Validation.
 
-用于快速查看一个 Deal Script 的全部依赖。
+Proposed report groupings:
 
-Source Type	示例	管理方式
-Deal Configuration	deal.params[“MaxRate”]	Analyst 设置、确认
-Direct Argument	Fa(MaxRate=5)	跟踪 Call Site
-Function Default	def Fa(MaxRate=5)	跟踪 Definition / Version
-Runtime Field	deal.periodics[period].EndSchBal	检查数据、Period
-Payment Input	payment_inputs[“PayInNumR”]	检查 Required / Value
-Derived Result	gf.Fb() 的输出	Lineage Tracking
-Class State	manager.MaxRate	State / Mutation Tracking
-Persisted Data	PeriodicCalc	追踪读写关系
+1. Deal Settings configurations: present, missing, invalid, or unconfirmed.
+2. System/runtime inputs: source, scope, requiredness, and current-period availability.
+3. Derived inputs: upstream function/output lineage and unresolved dependencies.
+4. Function/class state: default-versus-actual binding, overrides, repeated calls, and version differences.
 
-View B — Parameter Comparison
+Outcome principles:
 
-这是你之前提出的 Fa(MaxRate) vs Fb(MaxRate) 查询功能。
+• Different values are not automatically errors.
+• A missing required configuration is distinct from an unresolved dynamic function call.
+• A legitimate zero/default is distinct from a missing value.
+• Full dependency discovery belongs primarily to setup/changed-code review; period-specific required inputs still need checks at the appropriate periodic processing step.
+• Blocking or warning behavior should follow agreed business severity rules; the existing ASAP2 validation mechanism supports deal-level severity thresholds.
 
-Cross-Function Parameter Comparison
+────────
 
-Different SourcesTransformationsDefaults
+8. Source Reference and Assumptions
 
-Fa.MaxRate
+Primary internal source: ASAP_KNOWLEDGE_CONTEXT_20261025(3).md.
 
-5
+Relevant sections consolidated in that file:
 
-deal.params'MaxRate'
+• ASAP_SCRIPTING_MANUAL — PythonScript Objects and Access, deal, periodics, payment_inputs, Symbol Objects, get_index_value, get_currency_conversion_rate, get_calc_datas, raise_error, and Global Function Debugging.
+• ASAP_USER_MANUAL — Global Functions, To Use global functions, Payment Input History, and Deal Copy/Duplicate.
 
-Fb.MaxRate
-
-7
-
-Hardcoded literal 7
-
-Difference: Different input sources and values
-
-Recommended handling: Review if both functions should share the same deal configuration
-
-切换上方情景，可以看到系统应如何解释不同类型的参数差异。示例数据不代表真实 Deal。
-
-业务端不应简单地将所有 Difference 标记为 Error。应当允许为参数关系定义 INDEPENDENT、MUST_MATCH、DERIVED_FROM 或 UNKNOWN。
-
-四、技术实现建议（精简版）
-
-建议 PwC 实现以下四个核心数据结构，而不需要建设一个完整的 Python Debugger。
-
-数据结构	主要字段	目的
-ParameterSource	Source ID, path, type, unit, scope	确定参数真实身份
-FunctionBinding	GF name/version, call site, argument, source ID	确定参数如何传入
-DependencyEdge	From, to, transformation, resolution status	追踪嵌套调用和转换
-ExecutionSnapshot	Deal, period, invocation, resolved value, version	保存实际执行证据
-
-发现机制采用：
-
-* Static AST Analysis：分析直接传参、赋值和可确定的 GF 调用。
-* Registry / Class Contracts：解析 ValidationEngine、动态注册和 Class Dependencies。
-* Optional Runtime Tracing：针对无法静态确定的实际值或状态进行验证。
-
-每条依赖必须标注是 STATIC、DECLARED 还是 OBSERVED，避免把静态推导的可能性误认为已经执行的事实。
-
-Pre-Validation 则应根据类型进行处理：
-
-* MISSING_REQUIRED：必要配置或输入缺失。
-* TYPE_MISMATCH：输入数据类型不符合要求。
-* SOURCE_CONFLICT：业务上要求一致的参数来源不一致。
-* UNCONFIRMED：Deal Settings 已有值但尚未确认。
-* UNRESOLVED：动态依赖无法静态确定。
-* POTENTIAL_CYCLE：检测到可能的递归调用循环。
-
-对于真正需要阻断的错误，可以把结构化结果映射到 ASAP2 现有的 deal.raise_error(severity, ...)。根据 Knowledge，ASAP2 的原生 Severity 是 1–5，并结合 Deal-Level Validation Error Threshold 决定是否阻断下一步。
-
-五、我建议的开发优先级
-
-Phase 1 — Input Discovery & Classification
-
-识别所有直接调用、基础 GF 参数和 ASAP2 对象字段；区分 Deal Settings、Runtime、Derived 和 Default Inputs，并生成可下载报告。
-
-Phase 2 — Cross-Function Comparison & Dependency Graph
-
-实现 Fa.MaxRate vs Fb.MaxRate 比较、Nested GF 解析、Call Site 区分、Class Contracts 和 ValidationEngine Portfolio Expansion。
-
-Phase 3 — Runtime Lineage & Impact Analysis
-
-记录实际有效值、状态变化、历史 GF 版本，并支持跨 Deal / Shelf 的变更影响分析。
-
-最终，Deal Settings 管理需要人工维护的参数值，Dependency Explorer 管理全部输入和调用关系，Pre-Validation 负责发现缺失与不一致，ValidationEngine 继续负责实际 Validation Execution 和 Reporting。
-
-这样既符合上传的 ASAP2 Knowledge 中现有的数据对象、Global Functions 和 Processing Steps，也能兼容你未来要求 PwC 新增的 deal.params、递归扫描和参数比较能力，而不必把所有 Python Variables 都搬到 Deal Settings 中。
+Important: Source documentation confirms the object names and behaviors cited above, but does not establish the proposed deal.params interface, a universal parameter dependency scanner, or automatic effective-value comparison as existing ASAP2 features. Those are requirements discussed for future enhancement. Source examples have been simplified for clarity; illustrative business scenarios should not be treated as verified deal-specific rules.
