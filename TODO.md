@@ -1,44 +1,17 @@
-Global Function Parameter Management
+Hi [Name],
 
-Objective
+I've been analyzing the structured notes market using SEC EDGAR filings. Our dataset covers **14,645 filings across 10 issuer groups** from January 2025 through October 2026.
 
-Provide a centralized table in Deal Settings to manage and confirm deal-specific Global Function parameters.
+The dataset captures **issuer information, issuance dates, CUSIPs, issuance notional, coupon terms, underlying assets, downside barriers, worst-of features, autocall provisions, and maturity dates**, along with links to the original SEC filings. So far, we've validated approximately **$36.4B in issuance notional**.
 
-Table Structure
+A few interesting findings:
 
-The table shall contain five columns:
+- **Market Growth:** Filing volume increased **26.4% YoY**, while validated issuance notional grew **55.6% YoY** in Jan–Oct 2026.
+- **Issuer Concentration:** Morgan Stanley and Citi represent approximately **89% of captured filings**. Citi's validated issuance nearly doubled YoY (**+97.5% to $6.88B**), approaching Morgan Stanley's $7.26B within our dataset.
+- **Product Mix:** Autocallable, contingent coupon, and buffer notes account for approximately **88% of validated issuance notional**. Citi's issuance featuring worst-of structures grew **132% YoY**.
 
-1. Parameter Name
-2. Function Name
-3. Type (Number / Date / Flag / Text)
-4. Value
-5. Analyst Confirmed (Checkbox)
+I was already somewhat familiar with structured notes and features such as embedded derivatives, autocall provisions, contingent coupons, downside barriers, and worst-of structures. While I knew the market was booming, I hadn't realized how significant Citi's presence was in the filings we've captured.
 
-Business Requirements
+I'm very interested in learning more about the broader market, particularly the key issuers, dealers, distributors, and how they interact. I'd really appreciate the opportunity to connect sometime and hear your perspective on the industry.
 
-1. Flexible Parameters: The same Parameter Name may be used by multiple Global Functions with different Values.
-2. Parameter Management: Analysts can add, edit, delete, and confirm parameters for each deal.
-3. Unique Identification: Each Function Name + Parameter Name combination shall be unique within a deal.
-4. Script Access: Parameters shall be accessible using deal.params["FunctionName"]["ParameterName"].
-5. Analyst Confirmation: Each parameter requires analyst confirmation. New or modified entries shall be Unconfirmed until reviewed.
-6. Copy Deal Info: All parameter entries shall be copied to the new deal, with confirmation status reset to Unconfirmed.
-7. Setup Validation: All parameters must be confirmed before Deal Setup is completed.
-
-Example
-
-Parameter Name	Function Name	Type	Value	Analyst Confirmed
-MaxRate	Fa	Number	5	☑
-MaxRate	Fb	Number	7	☑
-MaxRate	Fc	Number	5	☐
-Tolerance	Fa	Number	0.01	☑
-Tolerance	Fb	Number	0.05	☐
-
-Script Access
-
-deal.params["Fa"]["MaxRate"]  # 5
-deal.params["Fb"]["MaxRate"]  # 7
-deal.params["Fc"]["MaxRate"]  # 5
-deal.params["Fa"]["Tolerance"]  # 0.01
-deal.params["Fb"]["Tolerance"]  # 0.05
-
-Different Global Functions may use the same Parameter Name independently without conflicts.
+Best regards
